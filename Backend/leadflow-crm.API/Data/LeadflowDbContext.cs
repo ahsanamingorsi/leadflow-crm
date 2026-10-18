@@ -2,6 +2,7 @@ using leadflow_crm.API.Models;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
+using leadflow_crm.API.Models.Crm;
 
 namespace leadflow_crm.API.Data;
 
@@ -21,11 +22,20 @@ public sealed class LeadflowDbContext(
     public DbSet<RolePermission> RolePermissions => Set<RolePermission>();
     public DbSet<AuditLogEntry> AuditLogs => Set<AuditLogEntry>();
     public DbSet<WorkspaceInvitation> WorkspaceInvitations => Set<WorkspaceInvitation>();
+    public DbSet<Lead> Leads => Set<Lead>();
+    public DbSet<LeadIntake> LeadIntakes => Set<LeadIntake>();
+    public DbSet<LeadAssignmentHistory> LeadAssignmentHistory => Set<LeadAssignmentHistory>();
+    public DbSet<LeadAssignmentConfiguration> LeadAssignmentConfigurations => Set<LeadAssignmentConfiguration>();
+    public DbSet<EmployeeAvailability> EmployeeAvailabilities => Set<EmployeeAvailability>();
+    public DbSet<LeadNotification> LeadNotifications => Set<LeadNotification>();
+    public DbSet<LeadUserNotification> LeadUserNotifications => Set<LeadUserNotification>();
+    public DbSet<Contact> Contacts => Set<Contact>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
         CrmModelConfiguration.Configure(builder);
+        LeadModelConfiguration.Configure(builder);
 
         builder.Entity<Workspace>(entity =>
         {

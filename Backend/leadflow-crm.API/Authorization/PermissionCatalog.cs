@@ -22,6 +22,15 @@ public static class PermissionCatalog
     public const string OpportunityValueView = "crm.opportunities.value.view";
     public const string PipelinesManage = "crm.pipelines.manage";
     public const string CustomFieldsManage = "crm.custom-fields.manage";
+    public const string LeadsView = "leads.view";
+    public const string LeadsViewAll = "leads.view-all";
+    public const string LeadsCreate = "leads.create";
+    public const string LeadsEdit = "leads.edit-own";
+    public const string LeadsAcknowledge = "leads.acknowledge";
+    public const string LeadsReassign = "leads.reassign";
+    public const string AvailabilityEditOwn = "leads.availability.edit-own";
+    public const string AvailabilityManage = "leads.availability.manage";
+    public const string LeadNotificationsView = "leads.notifications.view";
     public const string AssignmentRulesManage = "assignment.rules.manage";
     public const string IntegrationsManage = "integrations.manage";
     public const string AuditView = "audit.view";
@@ -49,6 +58,15 @@ public static class PermissionCatalog
         OpportunityValueView,
         PipelinesManage,
         CustomFieldsManage,
+        LeadsView,
+        LeadsViewAll,
+        LeadsCreate,
+        LeadsEdit,
+        LeadsAcknowledge,
+        LeadsReassign,
+        AvailabilityEditOwn,
+        AvailabilityManage,
+        LeadNotificationsView,
         AssignmentRulesManage,
         IntegrationsManage,
         AuditView,
@@ -66,6 +84,12 @@ public static class PermissionCatalog
         OpportunitiesView,
         OpportunitiesCreate,
         OpportunitiesEdit,
+        LeadsView,
+        LeadsCreate,
+        LeadsEdit,
+        LeadsAcknowledge,
+        AvailabilityEditOwn,
+        LeadNotificationsView,
         DashboardView
     ];
 }

@@ -6,6 +6,7 @@ using leadflow_crm.API.Authorization;
 using leadflow_crm.API.Data;
 using leadflow_crm.API.DTOs.Auth;
 using leadflow_crm.API.Models;
+using leadflow_crm.API.Models.Crm;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
@@ -186,6 +187,7 @@ public sealed class WorkspaceMembersController(
             RoleId = invitation.RoleId,
             WorkspaceId = invitation.WorkspaceId
         });
+        dbContext.EmployeeAvailabilities.Add(new EmployeeAvailability { WorkspaceId = user.WorkspaceId, UserId = user.Id });
         invitation.AcceptedAtUtc = now;
         dbContext.AuditLogs.Add(CreateAuditEntry(
             user,

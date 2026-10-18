@@ -5,6 +5,7 @@ using leadflow_crm.API.Data;
 using leadflow_crm.API.DTOs.Auth;
 using leadflow_crm.API.Models;
 using leadflow_crm.API.Services;
+using leadflow_crm.API.Models.Crm;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
@@ -50,6 +51,7 @@ public sealed class AuthController(
             TimeZoneId = "Asia/Karachi"
         };
         dbContext.Workspaces.Add(workspace);
+        dbContext.LeadAssignmentConfigurations.Add(new LeadAssignmentConfiguration { WorkspaceId = workspace.Id });
         CrmService.AddDefaultPipeline(dbContext, workspace.Id);
         await dbContext.SaveChangesAsync();
 
@@ -123,6 +125,7 @@ public sealed class AuthController(
             RoleId = createdRoles["Owner"].Id,
             WorkspaceId = workspace.Id
         });
+        dbContext.EmployeeAvailabilities.Add(new EmployeeAvailability { WorkspaceId = workspace.Id, UserId = user.Id });
         dbContext.AuditLogs.Add(new AuditLogEntry
         {
             WorkspaceId = workspace.Id,

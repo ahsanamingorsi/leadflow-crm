@@ -102,5 +102,5 @@ public sealed record StageResponse(Guid Id, Guid PipelineId, string Name, int Po
 public sealed record PipelineResponse(Guid Id, string Name, bool IsDefault, IReadOnlyList<StageResponse> Stages, byte[] RowVersion);
 public sealed record CustomFieldResponse(Guid Id, string Name, CrmEntityType EntityType, Guid? PipelineId,
     CustomFieldType FieldType, IReadOnlyList<string> Options, byte[] RowVersion);
-public sealed record ActivityResponse(Guid Id, CrmEntityType EntityType, Guid RecordId, Guid ActorUserId,
+public sealed record ActivityResponse(Guid Id, CrmEntityType EntityType, Guid RecordId, Guid? ActorUserId,
     string ActorName, string EventType, string Summary, DateTime OccurredAtUtc);

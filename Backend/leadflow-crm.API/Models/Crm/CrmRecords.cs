@@ -92,7 +92,7 @@ public sealed class CrmActivity
     public Guid WorkspaceId { get; set; }
     public CrmEntityType EntityType { get; set; }
     public Guid RecordId { get; set; }
-    public Guid ActorUserId { get; set; }
+    public Guid? ActorUserId { get; set; }
     [MaxLength(80)] public string EventType { get; set; } = string.Empty;
     [MaxLength(4000)] public string Summary { get; set; } = string.Empty;
     public DateTime OccurredAtUtc { get; set; } = DateTime.UtcNow;
