@@ -25,6 +25,7 @@ public sealed class LeadflowDbContext(
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
+        CrmModelConfiguration.Configure(builder);
 
         builder.Entity<Workspace>(entity =>
         {

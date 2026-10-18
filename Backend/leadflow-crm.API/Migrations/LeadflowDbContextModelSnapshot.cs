@@ -319,6 +319,431 @@ namespace leadflow_crm.API.Migrations
                         });
                 });
 
+            modelBuilder.Entity("leadflow_crm.API.Models.Crm.Company", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Address")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("CustomFieldsJson")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Email")
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(160)
+                        .HasColumnType("nvarchar(160)");
+
+                    b.Property<string>("Phone")
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)");
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Website")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<Guid>("WorkspaceId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("WorkspaceId", "IsDeleted", "CreatedAtUtc");
+
+                    b.ToTable("CrmCompanies", (string)null);
+                });
+
+            modelBuilder.Entity("leadflow_crm.API.Models.Crm.Contact", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid?>("CompanyId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("CustomFieldsJson")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("DisplayName")
+                        .IsRequired()
+                        .HasMaxLength(160)
+                        .HasColumnType("nvarchar(160)");
+
+                    b.Property<string>("Email")
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("OptedOut")
+                        .HasColumnType("bit");
+
+                    b.Property<Guid?>("OwnerUserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Phone")
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)");
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid>("WorkspaceId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CompanyId", "WorkspaceId");
+
+                    b.HasIndex("OwnerUserId", "WorkspaceId");
+
+                    b.HasIndex("WorkspaceId", "Email");
+
+                    b.HasIndex("WorkspaceId", "Phone");
+
+                    b.HasIndex("WorkspaceId", "IsDeleted", "CreatedAtUtc");
+
+                    b.ToTable("CrmContacts", (string)null);
+                });
+
+            modelBuilder.Entity("leadflow_crm.API.Models.Crm.CrmActivity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("ActorUserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("EntityType")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<string>("EventType")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("nvarchar(80)");
+
+                    b.Property<DateTime>("OccurredAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid>("RecordId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Summary")
+                        .IsRequired()
+                        .HasMaxLength(4000)
+                        .HasColumnType("nvarchar(4000)");
+
+                    b.Property<Guid>("WorkspaceId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ActorUserId", "WorkspaceId");
+
+                    b.HasIndex("WorkspaceId", "EntityType", "RecordId", "OccurredAtUtc");
+
+                    b.ToTable("CrmActivities", (string)null);
+                });
+
+            modelBuilder.Entity("leadflow_crm.API.Models.Crm.CustomFieldDefinition", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("EntityType")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<string>("FieldType")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("nvarchar(120)");
+
+                    b.Property<string>("OptionsJson")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<Guid?>("PipelineId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid>("WorkspaceId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PipelineId", "WorkspaceId");
+
+                    b.HasIndex("WorkspaceId", "IsDeleted", "CreatedAtUtc");
+
+                    b.HasIndex("WorkspaceId", "EntityType", "PipelineId", "Name")
+                        .IsUnique()
+                        .HasFilter("[IsDeleted] = 0");
+
+                    b.ToTable("CrmCustomFields", (string)null);
+                });
+
+            modelBuilder.Entity("leadflow_crm.API.Models.Crm.Opportunity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("ContactId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("CurrencyCode")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("nvarchar(3)");
+
+                    b.Property<string>("CustomFieldsJson")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(4000)
+                        .HasColumnType("nvarchar(4000)");
+
+                    b.Property<DateOnly?>("ExpectedCloseDate")
+                        .HasColumnType("date");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<Guid>("OwnerUserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("PipelineId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
+                    b.Property<Guid>("StageId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<decimal>("Value")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<Guid>("WorkspaceId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasAlternateKey("Id", "WorkspaceId");
+
+                    b.HasIndex("ContactId", "WorkspaceId");
+
+                    b.HasIndex("OwnerUserId", "WorkspaceId");
+
+                    b.HasIndex("StageId", "PipelineId", "WorkspaceId");
+
+                    b.HasIndex("WorkspaceId", "IsDeleted", "CreatedAtUtc");
+
+                    b.HasIndex("WorkspaceId", "OwnerUserId", "StageId");
+
+                    b.ToTable("CrmOpportunities", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_CrmOpportunities_Value", "[Value] >= 0 AND [CurrencyCode] = 'PKR'");
+                        });
+                });
+
+            modelBuilder.Entity("leadflow_crm.API.Models.Crm.Pipeline", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<bool>("IsDefault")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("nvarchar(120)");
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid>("WorkspaceId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("WorkspaceId")
+                        .IsUnique()
+                        .HasFilter("[IsDefault] = 1 AND [IsDeleted] = 0");
+
+                    b.HasIndex("WorkspaceId", "Name")
+                        .IsUnique()
+                        .HasFilter("[IsDeleted] = 0");
+
+                    b.HasIndex("WorkspaceId", "IsDeleted", "CreatedAtUtc");
+
+                    b.ToTable("CrmPipelines", (string)null);
+                });
+
+            modelBuilder.Entity("leadflow_crm.API.Models.Crm.PipelineStage", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("nvarchar(10)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("nvarchar(120)");
+
+                    b.Property<Guid>("PipelineId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("Position")
+                        .HasColumnType("int");
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid>("WorkspaceId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PipelineId", "WorkspaceId");
+
+                    b.HasIndex("WorkspaceId", "IsDeleted", "CreatedAtUtc");
+
+                    b.HasIndex("WorkspaceId", "PipelineId", "Name")
+                        .IsUnique()
+                        .HasFilter("[IsDeleted] = 0");
+
+                    b.HasIndex("WorkspaceId", "PipelineId", "Position");
+
+                    b.ToTable("CrmPipelineStages", (string)null);
+                });
+
+            modelBuilder.Entity("leadflow_crm.API.Models.Crm.StageRequiredField", b =>
+                {
+                    b.Property<Guid>("WorkspaceId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("StageId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("FieldId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("WorkspaceId", "StageId", "FieldId");
+
+                    b.HasIndex("FieldId", "WorkspaceId");
+
+                    b.HasIndex("StageId", "WorkspaceId");
+
+                    b.ToTable("CrmStageRequiredFields", (string)null);
+                });
+
             modelBuilder.Entity("leadflow_crm.API.Models.RolePermission", b =>
                 {
                     b.Property<Guid>("WorkspaceId")
@@ -538,6 +963,133 @@ namespace leadflow_crm.API.Migrations
                     b.Navigation("ActorUser");
 
                     b.Navigation("Workspace");
+                });
+
+            modelBuilder.Entity("leadflow_crm.API.Models.Crm.Company", b =>
+                {
+                    b.HasOne("leadflow_crm.API.Models.Workspace", null)
+                        .WithMany()
+                        .HasForeignKey("WorkspaceId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("leadflow_crm.API.Models.Crm.Contact", b =>
+                {
+                    b.HasOne("leadflow_crm.API.Models.Workspace", null)
+                        .WithMany()
+                        .HasForeignKey("WorkspaceId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("leadflow_crm.API.Models.Crm.Company", null)
+                        .WithMany()
+                        .HasForeignKey("CompanyId", "WorkspaceId")
+                        .HasPrincipalKey("Id", "WorkspaceId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("leadflow_crm.API.Models.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("OwnerUserId", "WorkspaceId")
+                        .HasPrincipalKey("Id", "WorkspaceId")
+                        .OnDelete(DeleteBehavior.Restrict);
+                });
+
+            modelBuilder.Entity("leadflow_crm.API.Models.Crm.CrmActivity", b =>
+                {
+                    b.HasOne("leadflow_crm.API.Models.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("ActorUserId", "WorkspaceId")
+                        .HasPrincipalKey("Id", "WorkspaceId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("leadflow_crm.API.Models.Crm.CustomFieldDefinition", b =>
+                {
+                    b.HasOne("leadflow_crm.API.Models.Workspace", null)
+                        .WithMany()
+                        .HasForeignKey("WorkspaceId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("leadflow_crm.API.Models.Crm.Pipeline", null)
+                        .WithMany()
+                        .HasForeignKey("PipelineId", "WorkspaceId")
+                        .HasPrincipalKey("Id", "WorkspaceId")
+                        .OnDelete(DeleteBehavior.Restrict);
+                });
+
+            modelBuilder.Entity("leadflow_crm.API.Models.Crm.Opportunity", b =>
+                {
+                    b.HasOne("leadflow_crm.API.Models.Workspace", null)
+                        .WithMany()
+                        .HasForeignKey("WorkspaceId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("leadflow_crm.API.Models.Crm.Contact", null)
+                        .WithMany()
+                        .HasForeignKey("ContactId", "WorkspaceId")
+                        .HasPrincipalKey("Id", "WorkspaceId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("leadflow_crm.API.Models.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("OwnerUserId", "WorkspaceId")
+                        .HasPrincipalKey("Id", "WorkspaceId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("leadflow_crm.API.Models.Crm.PipelineStage", null)
+                        .WithMany()
+                        .HasForeignKey("StageId", "PipelineId", "WorkspaceId")
+                        .HasPrincipalKey("Id", "PipelineId", "WorkspaceId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("leadflow_crm.API.Models.Crm.Pipeline", b =>
+                {
+                    b.HasOne("leadflow_crm.API.Models.Workspace", null)
+                        .WithMany()
+                        .HasForeignKey("WorkspaceId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("leadflow_crm.API.Models.Crm.PipelineStage", b =>
+                {
+                    b.HasOne("leadflow_crm.API.Models.Workspace", null)
+                        .WithMany()
+                        .HasForeignKey("WorkspaceId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("leadflow_crm.API.Models.Crm.Pipeline", null)
+                        .WithMany()
+                        .HasForeignKey("PipelineId", "WorkspaceId")
+                        .HasPrincipalKey("Id", "WorkspaceId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("leadflow_crm.API.Models.Crm.StageRequiredField", b =>
+                {
+                    b.HasOne("leadflow_crm.API.Models.Crm.CustomFieldDefinition", null)
+                        .WithMany()
+                        .HasForeignKey("FieldId", "WorkspaceId")
+                        .HasPrincipalKey("Id", "WorkspaceId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("leadflow_crm.API.Models.Crm.PipelineStage", null)
+                        .WithMany()
+                        .HasForeignKey("StageId", "WorkspaceId")
+                        .HasPrincipalKey("Id", "WorkspaceId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("leadflow_crm.API.Models.RolePermission", b =>

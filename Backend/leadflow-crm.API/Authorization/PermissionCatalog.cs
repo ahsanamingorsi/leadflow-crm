@@ -20,6 +20,8 @@ public static class PermissionCatalog
     public const string OpportunitiesDelete = "crm.opportunities.delete";
     public const string OpportunitiesExport = "crm.opportunities.export";
     public const string OpportunityValueView = "crm.opportunities.value.view";
+    public const string PipelinesManage = "crm.pipelines.manage";
+    public const string CustomFieldsManage = "crm.custom-fields.manage";
     public const string AssignmentRulesManage = "assignment.rules.manage";
     public const string IntegrationsManage = "integrations.manage";
     public const string AuditView = "audit.view";
@@ -45,6 +47,8 @@ public static class PermissionCatalog
         OpportunitiesDelete,
         OpportunitiesExport,
         OpportunityValueView,
+        PipelinesManage,
+        CustomFieldsManage,
         AssignmentRulesManage,
         IntegrationsManage,
         AuditView,

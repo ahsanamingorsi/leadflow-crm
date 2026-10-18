@@ -4,6 +4,7 @@ using leadflow_crm.API.Authorization;
 using leadflow_crm.API.Data;
 using leadflow_crm.API.DTOs.Auth;
 using leadflow_crm.API.Models;
+using leadflow_crm.API.Services;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
@@ -49,6 +50,7 @@ public sealed class AuthController(
             TimeZoneId = "Asia/Karachi"
         };
         dbContext.Workspaces.Add(workspace);
+        CrmService.AddDefaultPipeline(dbContext, workspace.Id);
         await dbContext.SaveChangesAsync();
 
         var roleDefinitions = new[]
