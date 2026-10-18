@@ -41,7 +41,7 @@ public sealed class LeadWorkflowService(LeadflowDbContext db, CrmService crm, IL
         LeadIntakeRequest request, string source, string? sourceDetail, CancellationToken cancellationToken = default)
     {
         ValidateIdempotencyKey(key);
-        if (source is not ("Email" or "Website")) throw new CrmException(400, "The integration source is invalid.");
+        if (source is not ("Email" or "Website" or "WhatsApp")) throw new CrmException(400, "The integration source is invalid.");
         return CreateIntakeAsync(workspaceId, key, request, source, sourceDetail, null, cancellationToken);
     }
 
@@ -194,6 +194,13 @@ public sealed class LeadWorkflowService(LeadflowDbContext db, CrmService crm, IL
         config.RoundRobinLastUserId = owner.Id;
         intake.Status = LeadIntakeStatus.Assigned;
         intake.LeadId = lead.Id;
+        intake.MatchedContactId = contact.Id;
+        if (intake.Source == "WhatsApp")
+        {
+            var pendingMessages = await db.WhatsAppMessages.Where(x => x.WorkspaceId == intake.WorkspaceId && x.IntakeId == intake.Id).ToListAsync(cancellationToken);
+            foreach (var message in pendingMessages) { message.ContactId = contact.Id; message.LeadId = lead.Id; }
+            if (pendingMessages.Any(x => x.IsOptOut)) contact.OptedOut = true;
+        }
         intake.LastError = null;
         db.LeadAssignmentHistory.Add(new LeadAssignmentHistory { WorkspaceId = intake.WorkspaceId, LeadId = lead.Id,
             PreviousOwnerUserId = null, NewOwnerUserId = owner.Id, ActorType = "System", Reason = "InitialAssignment",

@@ -22,6 +22,38 @@ public sealed class WorkspaceMembersController(
     UserManager<ApplicationUser> userManager,
     SignInManager<ApplicationUser> signInManager) : ControllerBase
 {
+    [HttpPut("members/{id:guid}/role"), Authorize(Policy = PermissionCatalog.WorkspaceMembersManage), ValidateAntiForgeryToken]
+    public async Task<IActionResult> ChangeRole(Guid id, ChangeMemberRoleRequest request)
+    {
+        var actor = await GetCurrentUserAsync();
+        if (actor is null) return Unauthorized();
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(System.Data.IsolationLevel.Serializable);
+        var member = await dbContext.Users.SingleOrDefaultAsync(x => x.Id == id && x.WorkspaceId == actor.WorkspaceId && x.IsActive);
+        var role = await dbContext.Roles.SingleOrDefaultAsync(x => x.Id == request.RoleId && x.WorkspaceId == actor.WorkspaceId);
+        if (member is null || role is null) return NotFound();
+        if (member.Id == actor.Id || await IsOwnerAsync(member) || role.DisplayName == "Owner")
+            return Conflict(new { error = "Owner roles and your own role cannot be changed here." });
+        if (!await IsOwnerAsync(actor))
+        {
+            var actorPermissions = await (from ur in dbContext.UserRoles join p in dbContext.RolePermissions
+                on new { ur.RoleId, ur.WorkspaceId } equals new { p.RoleId, p.WorkspaceId }
+                where ur.UserId == actor.Id && ur.WorkspaceId == actor.WorkspaceId select p.PermissionKey).ToListAsync();
+            var requested = await dbContext.RolePermissions.Where(x => x.RoleId == role.Id && x.WorkspaceId == actor.WorkspaceId).Select(x => x.PermissionKey).ToListAsync();
+            var currentRoles = await dbContext.UserRoles.Where(x => x.UserId == member.Id).Select(x => x.RoleId).ToListAsync();
+            var currentPermissions = await dbContext.RolePermissions.Where(x => currentRoles.Contains(x.RoleId) && x.WorkspaceId == actor.WorkspaceId).Select(x => x.PermissionKey).ToListAsync();
+            if (requested.Concat(currentPermissions).Any(x => !actorPermissions.Contains(x) || x == PermissionCatalog.WorkspaceRolesManage)) return Forbid();
+        }
+        var old = await dbContext.UserRoles.Where(x => x.UserId == member.Id && x.WorkspaceId == actor.WorkspaceId).ToListAsync();
+        dbContext.UserRoles.RemoveRange(old);
+        await dbContext.SaveChangesAsync();
+        dbContext.UserRoles.Add(new ApplicationUserRole { UserId = member.Id, RoleId = role.Id, WorkspaceId = actor.WorkspaceId });
+        dbContext.AuditLogs.Add(CreateAuditEntry(actor, "workspace.member.role.changed", "ApplicationUser", member.Id,
+            old.Select(x => x.RoleId).ToArray(), new { RoleId = role.Id }));
+        await dbContext.SaveChangesAsync();
+        await transaction.CommitAsync();
+        return NoContent();
+    }
+
     [HttpGet("members")]
     [Authorize(Policy = PermissionCatalog.WorkspaceMembersManage)]
     public async Task<ActionResult<IReadOnlyList<WorkspaceMemberResponse>>> GetMembers()

@@ -64,6 +64,12 @@ public sealed class IntegrationsController(
     {
         var workspaceId = Crm.Actor.WorkspaceId;
         var prior = await integrations.GetEmailSettingsAsync(workspaceId, cancellationToken);
+        var beforeState = prior is null ? null : new
+        {
+            prior.Host, prior.Port, prior.FromAddress, prior.EnableSsl,
+            HasCredentials = !string.IsNullOrWhiteSpace(prior.Username),
+            HasInboundWebhook = !string.IsNullOrWhiteSpace(prior.InboundWebhookSecret)
+        };
         if (string.IsNullOrWhiteSpace(request.Host) || request.Host.Contains(' ') ||
             !Uri.CheckHostName(request.Host.Trim()).Equals(UriHostNameType.Dns) && !System.Net.IPAddress.TryParse(request.Host, out _))
             throw new CrmException(400, "Enter a valid SMTP host name or IP address.");
@@ -76,6 +82,23 @@ public sealed class IntegrationsController(
             new EmailSmtpSettings(request.Host.Trim(), request.Port, request.FromAddress.Trim(), request.EnableSsl,
                 username, password, secret), cancellationToken);
         var settings = await integrations.GetEmailSettingsAsync(workspaceId, cancellationToken);
+        db.AuditLogs.Add(LeadWorkflowService.CreateAudit(workspaceId, Crm.Actor.Id, "integration.email.settings-updated",
+            "WorkspaceIntegration", saved.Id, new
+            {
+                Before = beforeState,
+                After = new
+                {
+                    settings!.Host, settings.Port, settings.FromAddress, settings.EnableSsl,
+                    HasCredentials = !string.IsNullOrWhiteSpace(settings.Username),
+                    HasInboundWebhook = !string.IsNullOrWhiteSpace(settings.InboundWebhookSecret)
+                }
+            }));
+        db.IntegrationSyncEvents.Add(new IntegrationSyncEvent
+        {
+            WorkspaceId = workspaceId, Provider = "email", EventType = "configuration.updated",
+            ExternalEventId = saved.Id.ToString("N"), Status = "Succeeded", Summary = "Workspace email settings were updated."
+        });
+        await db.SaveChangesAsync(cancellationToken);
         return Ok(integrations.ToEmailResponse(saved, settings));
     }
 
@@ -91,12 +114,23 @@ public sealed class IntegrationsController(
             await emailSender.SendAsync(workspaceId, Crm.Actor.Email, "Leadflow CRM email connection test",
                 "Email delivery is connected for this workspace.", cancellationToken: cancellationToken);
             await integrations.MarkStatusAsync(workspaceId, "email", IntegrationStatus.Connected, cancellationToken: cancellationToken);
+            db.IntegrationSyncEvents.Add(new IntegrationSyncEvent
+            {
+                WorkspaceId = workspaceId, Provider = "email", EventType = "connection.tested",
+                ExternalEventId = Guid.NewGuid().ToString("N"), Status = "Succeeded", Summary = "SMTP test email was delivered."
+            });
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
             await integrations.MarkStatusAsync(workspaceId, "email", IntegrationStatus.Error,
                 WorkspaceIntegrationService.SafeError(exception.Message), cancellationToken);
+            db.IntegrationSyncEvents.Add(new IntegrationSyncEvent
+            {
+                WorkspaceId = workspaceId, Provider = "email", EventType = "connection.test-failed",
+                ExternalEventId = Guid.NewGuid().ToString("N"), Status = "Failed", Summary = "SMTP test email delivery failed."
+            });
         }
+        await db.SaveChangesAsync(cancellationToken);
         var row = await integrations.FindAsync(workspaceId, "email", cancellationToken);
         return Ok(integrations.ToEmailResponse(row, settings));
     }

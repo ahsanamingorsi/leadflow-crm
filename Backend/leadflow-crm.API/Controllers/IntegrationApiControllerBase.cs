@@ -16,7 +16,8 @@ public abstract class IntegrationApiControllerBase(CrmService crm) : Controller
     {
         try
         {
-            await crm.InitializeAsync(User);
+            if (context.HttpContext.GetEndpoint()?.Metadata.GetMetadata<IAllowAnonymous>() is null)
+                await crm.InitializeAsync(User);
             var executed = await next();
             if (executed.Exception is not null && !executed.ExceptionHandled)
             {

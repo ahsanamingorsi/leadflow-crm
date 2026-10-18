@@ -2,6 +2,8 @@ using System.ComponentModel.DataAnnotations;
 
 namespace leadflow_crm.API.DTOs.Auth;
 
+public sealed record ChangeMemberRoleRequest(Guid RoleId);
+
 public sealed class CreateInvitationRequest
 {
     [Required, EmailAddress, StringLength(256)]

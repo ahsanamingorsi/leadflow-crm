@@ -8,7 +8,7 @@ public enum IntegrationStatus { NotConfigured, Configured, Connected, Error, Dis
 [JsonConverter(typeof(JsonStringEnumConverter<EmailMessageDirection>))]
 public enum EmailMessageDirection { Inbound, Outbound }
 [JsonConverter(typeof(JsonStringEnumConverter<EmailDeliveryStatus>))]
-public enum EmailDeliveryStatus { Received, Pending, Sent, Failed }
+public enum EmailDeliveryStatus { Received, Pending, Sent, Failed, Unknown }
 [JsonConverter(typeof(JsonStringEnumConverter<PaymentStatus>))]
 public enum PaymentStatus { Pending, Paid, Failed, Expired, Refunded }
 [JsonConverter(typeof(JsonStringEnumConverter<AppointmentStatus>))]

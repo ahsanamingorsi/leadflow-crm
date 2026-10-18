@@ -3,6 +3,7 @@ using System.Text;
 using leadflow_crm.API.Authorization;
 using leadflow_crm.API.Data;
 using leadflow_crm.API.DTOs.Crm;
+using leadflow_crm.API.Models;
 using leadflow_crm.API.Models.Crm;
 using leadflow_crm.API.Services;
 using Microsoft.AspNetCore.Authorization;
@@ -52,7 +53,17 @@ public sealed class CalendarController(
     {
         var row = await db.CalendarConnections.SingleOrDefaultAsync(x =>
             x.WorkspaceId == Crm.Actor.WorkspaceId && x.UserId == Crm.Actor.Id, cancellationToken);
-        if (row is not null) db.CalendarConnections.Remove(row);
+        if (row is not null)
+        {
+            db.CalendarConnections.Remove(row);
+            db.AuditLogs.Add(LeadWorkflowService.CreateAudit(Crm.Actor.WorkspaceId, Crm.Actor.Id,
+                "integration.calendar.disconnected", "CalendarConnection", row.Id, new { row.EmailAddress, row.CalendarId }));
+            db.IntegrationSyncEvents.Add(new IntegrationSyncEvent
+            {
+                WorkspaceId = Crm.Actor.WorkspaceId, Provider = "google-calendar", EventType = "connection.disconnected",
+                ExternalEventId = row.Id.ToString("N"), Status = "Succeeded", Summary = "Google Calendar was disconnected."
+            });
+        }
         var remaining = await db.CalendarConnections.AnyAsync(x => x.WorkspaceId == Crm.Actor.WorkspaceId && x.UserId != Crm.Actor.Id, cancellationToken);
         if (!remaining) await integrations.MarkStatusAsync(Crm.Actor.WorkspaceId, "google-calendar", IntegrationStatus.Disabled, cancellationToken: cancellationToken);
         else if (row is not null) await db.SaveChangesAsync(cancellationToken);
@@ -110,6 +121,8 @@ public sealed class CalendarController(
         db.CalendarAppointments.Add(row);
         await db.SaveChangesAsync(cancellationToken);
         await SyncEventAsync(connection, row, "create", cancellationToken);
+        RecordAppointmentHistory(row, "created", null);
+        await db.SaveChangesAsync(cancellationToken);
         return Ok(ToResponse(row));
     }
 
@@ -121,6 +134,7 @@ public sealed class CalendarController(
             x.WorkspaceId == Crm.Actor.WorkspaceId && x.CreatedByUserId == Crm.Actor.Id, cancellationToken)
             ?? throw new CrmException(404, "The appointment was not found in your calendar.");
         if (row.Status == nameof(AppointmentStatus.Cancelled)) throw new CrmException(409, "A cancelled appointment cannot be changed.");
+        var before = new { row.Title, row.StartsAtUtc, row.EndsAtUtc, row.ContactId, row.OpportunityId, row.Status };
         var connection = await RequireConnectionAsync(row.WorkspaceId, Crm.Actor.Id, cancellationToken);
         var (startUtc, endUtc) = ValidateRange(request);
         bool googleConflict;
@@ -150,6 +164,8 @@ public sealed class CalendarController(
         row.AttendeeEmail = CrmService.Clean(request.AttendeeEmail) ?? contact?.Email;
         row.StartsAtUtc = startUtc; row.EndsAtUtc = endUtc; row.UpdatedAtUtc = DateTime.UtcNow;
         await SyncEventAsync(connection, row, "update", cancellationToken);
+        RecordAppointmentHistory(row, "rescheduled", before);
+        await db.SaveChangesAsync(cancellationToken);
         return Ok(ToResponse(row));
     }
 
@@ -160,6 +176,7 @@ public sealed class CalendarController(
             x.WorkspaceId == Crm.Actor.WorkspaceId && x.CreatedByUserId == Crm.Actor.Id, cancellationToken)
             ?? throw new CrmException(404, "The appointment was not found in your calendar.");
         if (row.Status == nameof(AppointmentStatus.Cancelled)) return Ok(ToResponse(row));
+        var before = new { row.Title, row.StartsAtUtc, row.EndsAtUtc, row.ContactId, row.OpportunityId, row.Status };
         var connection = await RequireConnectionAsync(row.WorkspaceId, Crm.Actor.Id, cancellationToken);
         try
         {
@@ -176,6 +193,8 @@ public sealed class CalendarController(
             return StatusCode(StatusCodes.Status502BadGateway, ToResponse(row));
         }
         await db.SaveChangesAsync(cancellationToken);
+        RecordAppointmentHistory(row, "cancelled", before);
+        await db.SaveChangesAsync(cancellationToken);
         return Ok(ToResponse(row));
     }
 
@@ -188,7 +207,38 @@ public sealed class CalendarController(
         if (row.Status == nameof(AppointmentStatus.Cancelled)) throw new CrmException(409, "A cancelled appointment cannot be retried.");
         var connection = await RequireConnectionAsync(row.WorkspaceId, Crm.Actor.Id, cancellationToken);
         await SyncEventAsync(connection, row, "update", cancellationToken);
+        RecordAppointmentHistory(row, "retry", null);
+        await db.SaveChangesAsync(cancellationToken);
         return Ok(ToResponse(row));
+    }
+
+    private void RecordAppointmentHistory(CalendarAppointment row, string action, object? before)
+    {
+        var after = new { row.Title, row.StartsAtUtc, row.EndsAtUtc, row.ContactId, row.OpportunityId, row.Status };
+        db.AuditLogs.Add(new AuditLogEntry
+        {
+            WorkspaceId = row.WorkspaceId, ActorUserId = Crm.Actor.Id, ActorWorkspaceId = row.WorkspaceId,
+            ActorType = "User", EventType = $"calendar.appointment.{action}", TargetType = "CalendarAppointment",
+            TargetId = row.Id.ToString(), BeforeJson = before is null ? null : CrmService.Snapshot(before),
+            AfterJson = CrmService.Snapshot(after)
+        });
+        var entityType = row.OpportunityId.HasValue ? CrmEntityType.Opportunity : CrmEntityType.Contact;
+        var recordId = row.OpportunityId ?? row.ContactId;
+        if (recordId.HasValue)
+            db.Set<CrmActivity>().Add(new CrmActivity
+            {
+                WorkspaceId = row.WorkspaceId, EntityType = entityType, RecordId = recordId.Value,
+                ActorUserId = Crm.Actor.Id, EventType = $"calendar.appointment.{action}",
+                Summary = action switch
+                {
+                    "created" => "Calendar appointment created.",
+                    "rescheduled" => "Calendar appointment rescheduled.",
+                    "cancelled" => "Calendar appointment cancelled.",
+                    _ => row.Status == nameof(AppointmentStatus.Scheduled)
+                        ? "Calendar appointment synchronization retried successfully."
+                        : "Calendar appointment synchronization retry failed."
+                }
+            });
     }
 
     private async Task SyncEventAsync(CalendarConnection connection, CalendarAppointment row, string operation,
@@ -309,6 +359,14 @@ public sealed class GoogleCalendarCallbackController(
             existing.ConnectedAtUtc = DateTime.UtcNow;
             existing.LastCheckedAtUtc = DateTime.UtcNow;
             existing.LastError = null;
+            db.AuditLogs.Add(LeadWorkflowService.CreateAudit(oauth.WorkspaceId, oauth.UserId,
+                "integration.calendar.connected", "CalendarConnection", existing.Id,
+                new { existing.EmailAddress, existing.CalendarId, existing.ConnectedAtUtc }));
+            db.IntegrationSyncEvents.Add(new IntegrationSyncEvent
+            {
+                WorkspaceId = oauth.WorkspaceId, Provider = "google-calendar", EventType = "connection.connected",
+                ExternalEventId = existing.Id.ToString("N"), Status = "Succeeded", Summary = "Google Calendar OAuth connection completed."
+            });
             await db.SaveChangesAsync(cancellationToken);
             await integrations.MarkStatusAsync(oauth.WorkspaceId, "google-calendar", IntegrationStatus.Connected, cancellationToken: cancellationToken);
             return Redirect(FrontendUrl(configuration, "calendar=connected"));

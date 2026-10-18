@@ -1580,6 +1580,59 @@ namespace leadflow_crm.API.Migrations
                     b.ToTable("CrmPipelineStages", (string)null);
                 });
 
+            modelBuilder.Entity("leadflow_crm.API.Models.Crm.SavedListRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("EntityType")
+                        .IsRequired()
+                        .HasMaxLength(24)
+                        .HasColumnType("nvarchar(24)");
+
+                    b.Property<string>("FiltersJson")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<bool>("IsShared")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("nvarchar(120)");
+
+                    b.Property<Guid>("OwnerUserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid>("WorkspaceId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OwnerUserId", "WorkspaceId");
+
+                    b.HasIndex("WorkspaceId", "OwnerUserId", "Name")
+                        .IsUnique();
+
+                    b.HasIndex("WorkspaceId", "EntityType", "IsShared", "UpdatedAtUtc");
+
+                    b.ToTable("SavedLists", (string)null);
+                });
+
             modelBuilder.Entity("leadflow_crm.API.Models.Crm.StageRequiredField", b =>
                 {
                     b.Property<Guid>("WorkspaceId")
@@ -1598,6 +1651,95 @@ namespace leadflow_crm.API.Migrations
                     b.HasIndex("StageId", "WorkspaceId");
 
                     b.ToTable("CrmStageRequiredFields", (string)null);
+                });
+
+            modelBuilder.Entity("leadflow_crm.API.Models.Crm.WhatsAppMessage", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid?>("ActorUserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Body")
+                        .IsRequired()
+                        .HasMaxLength(4096)
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("ClientKey")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<Guid?>("ContactId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("ContentSid")
+                        .HasMaxLength(34)
+                        .HasColumnType("nvarchar(34)");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Direction")
+                        .IsRequired()
+                        .HasMaxLength(12)
+                        .HasColumnType("nvarchar(12)");
+
+                    b.Property<Guid?>("IntakeId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<bool>("IsOptOut")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("LastError")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<Guid?>("LeadId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Phone")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<string>("ProviderMessageId")
+                        .HasMaxLength(34)
+                        .HasColumnType("nvarchar(34)");
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(24)
+                        .HasColumnType("nvarchar(24)");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid>("WorkspaceId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ContactId", "WorkspaceId");
+
+                    b.HasIndex("WorkspaceId", "ClientKey")
+                        .IsUnique();
+
+                    b.HasIndex("WorkspaceId", "ProviderMessageId")
+                        .IsUnique()
+                        .HasFilter("[ProviderMessageId] IS NOT NULL");
+
+                    b.HasIndex("WorkspaceId", "Phone", "CreatedAtUtc");
+
+                    b.ToTable("WhatsAppMessages");
                 });
 
             modelBuilder.Entity("leadflow_crm.API.Models.Crm.WorkspaceIntegration", b =>
@@ -2270,6 +2412,22 @@ namespace leadflow_crm.API.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("leadflow_crm.API.Models.Crm.SavedListRecord", b =>
+                {
+                    b.HasOne("leadflow_crm.API.Models.Workspace", null)
+                        .WithMany()
+                        .HasForeignKey("WorkspaceId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("leadflow_crm.API.Models.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("OwnerUserId", "WorkspaceId")
+                        .HasPrincipalKey("Id", "WorkspaceId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("leadflow_crm.API.Models.Crm.StageRequiredField", b =>
                 {
                     b.HasOne("leadflow_crm.API.Models.Crm.CustomFieldDefinition", null)
@@ -2285,6 +2443,21 @@ namespace leadflow_crm.API.Migrations
                         .HasPrincipalKey("Id", "WorkspaceId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("leadflow_crm.API.Models.Crm.WhatsAppMessage", b =>
+                {
+                    b.HasOne("leadflow_crm.API.Models.Workspace", null)
+                        .WithMany()
+                        .HasForeignKey("WorkspaceId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("leadflow_crm.API.Models.Crm.Contact", null)
+                        .WithMany()
+                        .HasForeignKey("ContactId", "WorkspaceId")
+                        .HasPrincipalKey("Id", "WorkspaceId")
+                        .OnDelete(DeleteBehavior.Restrict);
                 });
 
             modelBuilder.Entity("leadflow_crm.API.Models.Crm.WorkspaceIntegration", b =>

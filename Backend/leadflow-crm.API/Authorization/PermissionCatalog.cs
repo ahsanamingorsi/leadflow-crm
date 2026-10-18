@@ -35,6 +35,8 @@ public static class PermissionCatalog
     public const string IntegrationsManage = "integrations.manage";
     public const string EmailInboxView = "email.inbox.view";
     public const string EmailInboxReply = "email.inbox.reply";
+    public const string WhatsAppView = "whatsapp.inbox.view";
+    public const string WhatsAppReply = "whatsapp.inbox.reply";
     public const string CalendarUse = "calendar.use";
     public const string AuditView = "audit.view";
     public const string DashboardView = "dashboard.view";
@@ -74,6 +76,8 @@ public static class PermissionCatalog
         IntegrationsManage,
         EmailInboxView,
         EmailInboxReply,
+        WhatsAppView,
+        WhatsAppReply,
         CalendarUse,
         AuditView,
         DashboardView
@@ -98,6 +102,8 @@ public static class PermissionCatalog
         LeadNotificationsView,
         EmailInboxView,
         EmailInboxReply,
+        WhatsAppView,
+        WhatsAppReply,
         CalendarUse,
         DashboardView
     ];

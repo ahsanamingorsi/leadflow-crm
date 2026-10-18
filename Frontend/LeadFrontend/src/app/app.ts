@@ -1,7 +1,12 @@
 import { Component, computed, signal } from '@angular/core';
 import { DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { ApiActivity, ApiAssignedLead, ApiCalendarAppointment, ApiCalendarConnection, ApiCompany, ApiContact, ApiEmailConversation, ApiEmailSettings, ApiIntegrationStatus, ApiMember, ApiOpportunity, ApiPayment, ApiPipeline, ApiStage, CurrentUser, CrmApiService } from './crm-api.service';
+import { LeadDeskComponent } from './lead-desk.component';
+import { WorkspaceAdminComponent } from './workspace-admin.component';
+import { MessagingComponent } from './messaging.component';
+import { InvitationJoinComponent } from './invitation-join.component';
+import { RecordFieldsComponent } from './record-fields.component';
+import { ApiActivity, ApiAssignedLead, ApiAuditEntry, ApiCalendarAppointment, ApiCalendarConnection, ApiCompany, ApiContact, ApiCustomField, ApiDashboard, ApiEmailConversation, ApiEmailSettings, ApiIntegrationStatus, ApiMember, ApiOpportunity, ApiPayment, ApiPipeline, ApiRecoveryLead, ApiSavedList, ApiSavedListResult, ApiStage, CurrentUser, CrmApiService } from './crm-api.service';
 
 type Lead = {
   id: string; opportunityId: string; contactId: string; pipelineId: string; stageId: string; rowVersion: number[];
@@ -12,7 +17,7 @@ type Lead = {
 };
 type TeamPerson = { userId: string; name: string; role: string; initials: string; color: string; status: string; leads: string };
 
-@Component({ selector: 'app-root', imports: [FormsModule, DatePipe], templateUrl: './app.html', styleUrl: './app.css' })
+@Component({ selector: 'app-root', imports: [FormsModule, DatePipe, LeadDeskComponent, WorkspaceAdminComponent, MessagingComponent, InvitationJoinComponent, RecordFieldsComponent], templateUrl: './app.html', styleUrl: './app.css' })
 export class App {
   protected isAuthenticated = signal(false);
   protected authChecking = signal(true);
@@ -44,6 +49,45 @@ export class App {
   protected activities = signal<ApiActivity[]>([]);
   protected phase4Busy = signal(false);
   protected phase4Error = signal('');
+  protected phase5Busy = signal(false);
+  protected phase5Error = signal('');
+  protected dashboard = signal<ApiDashboard | null>(null);
+  protected recoveryItems = signal<ApiRecoveryLead[]>([]);
+  protected savedLists = signal<ApiSavedList[]>([]);
+  protected activeSavedList = signal<ApiSavedList | null>(null);
+  protected savedListResults = signal<ApiSavedListResult[]>([]);
+  protected savedListTotal = signal(0);
+  protected savedListPage = signal(1);
+  protected customFieldOptions = signal<ApiCustomField[]>([]);
+  protected auditEntries = signal<ApiAuditEntry[]>([]);
+  protected auditTotal = signal(0);
+  protected auditPage = signal(1);
+  protected auditEventFilter = '';
+  protected auditTargetFilter = '';
+  protected auditActorFilter = '';
+  protected auditSearch = '';
+  protected auditFromDate = '';
+  protected auditToDate = '';
+  protected selectedContact = signal<ApiContact | null>(null);
+  protected contactOpportunities = signal<ApiOpportunity[]>([]);
+  protected contactActivities = signal<ApiActivity[]>([]);
+  protected contactConversations = signal<ApiEmailConversation[]>([]);
+  protected contactPayments = signal<ApiPayment[]>([]);
+  protected contactAppointments = signal<ApiCalendarAppointment[]>([]);
+  protected dashboardStageFilter = signal('');
+  protected dashboardCardVisibility = signal<Record<string, boolean>>({});
+  protected savedListName = '';
+  protected savedListType: 'Contact' | 'Opportunity' | 'Lead' = 'Opportunity';
+  protected savedListSearch = '';
+  protected savedListSource = '';
+  protected savedListOwner = '';
+  protected savedListPipeline = '';
+  protected savedListStage = '';
+  protected savedListFromDate = '';
+  protected savedListToDate = '';
+  protected savedListCustomField = '';
+  protected savedListCustomValue = '';
+  protected savedListShared = false;
   protected integrationStatuses = signal<ApiIntegrationStatus[]>([]);
   protected emailSettings = signal<ApiEmailSettings | null>(null);
   protected integrationHistory = signal<Array<{ id: string; provider: string; eventType: string; status: string; summary: string; occurredAtUtc: string }>>([]);
@@ -82,14 +126,20 @@ export class App {
   protected contacts = signal<ApiContact[]>([]);
   protected companies = signal<ApiCompany[]>([]);
   protected team = signal<TeamPerson[]>([]);
+  protected workspaceMembers = signal<ApiMember[]>([]);
   protected activePipeline = computed(() => this.pipelines().find(pipeline => pipeline.isDefault) ?? this.pipelines()[0] ?? null);
   protected columns = computed(() => this.activePipeline()?.stages.slice().sort((a, b) => a.position - b.position) ?? []);
+  protected savedListStages(): ApiStage[] {
+    const pipeline = this.pipelines().find(item => item.id === this.savedListPipeline) ?? this.activePipeline();
+    return pipeline?.stages.slice().sort((a, b) => a.position - b.position) ?? [];
+  }
+  protected readonly auditTargetTypes = ['Contact', 'Opportunity', 'Lead', 'SavedList', 'PaymentRecord', 'CalendarAppointment', 'CalendarConnection', 'EmailMessage', 'WorkspaceIntegration'];
   protected get pipelineName(): string { return this.activePipeline()?.name ?? 'Pipeline'; }
   protected filteredLeads = computed(() => {
     const query = this.search().trim().toLowerCase();
     return this.leads().filter(lead => {
       const matchesQuery = !query || `${lead.name} ${lead.company} ${lead.email} ${lead.source} ${lead.status}`.toLowerCase().includes(query);
-      return matchesQuery;
+      return matchesQuery && (!this.dashboardStageFilter() || lead.stageId === this.dashboardStageFilter());
     });
   });
   protected filteredContacts = computed(() => {
@@ -97,14 +147,26 @@ export class App {
     return this.contacts().filter(contact => !query || `${contact.displayName} ${contact.email ?? ''} ${contact.phone ?? ''}`.toLowerCase().includes(query));
   });
   protected readonly navMain = [
-    { name: 'Overview', icon: '⌂' }, { name: 'Leads', icon: '▤' }, { name: 'Pipeline', icon: '▥' }, { name: 'Payments', icon: '＄' },
+    { name: 'Overview', icon: '⌂' }, { name: 'Leads', icon: '◷' }, { name: 'WhatsApp', icon: '☏' }, { name: 'Opportunities', icon: '▤' }, { name: 'Pipeline', icon: '▥' }, { name: 'Payments', icon: '＄' },
     { name: 'Recovery queue', icon: '↗' }, { name: 'Contacts', icon: '♧' }, { name: 'Inbox', icon: '✉' }, { name: 'Calendar', icon: '▦' }
   ];
   protected readonly navManage = [
-    { name: 'Team', icon: '♙' }, { name: 'Reports', icon: '▧' }, { name: 'Integrations', icon: '⌘' }, { name: 'Settings', icon: '⚙' }
+    { name: 'Team', icon: '♙' }, { name: 'Reports', icon: '▧' }, { name: 'Saved lists', icon: '☷' },
+    { name: 'Audit history', icon: '◷' }, { name: 'Integrations', icon: '⌘' }, { name: 'Settings', icon: '⚙' }
   ];
 
-  constructor(private readonly api: CrmApiService) { void this.checkAuthentication(); }
+  private readonly refreshTimer: number;
+  constructor(private readonly api: CrmApiService) {
+    void this.checkAuthentication();
+    this.refreshTimer = window.setInterval(() => {
+      if (!this.isAuthenticated() || document.visibilityState !== 'visible') return;
+      if (this.page() === 'Overview' || this.page() === 'Reports') void this.loadDashboard();
+      else if (this.page() === 'Inbox') void this.loadInboxData();
+      else if (this.page() === 'Recovery queue') void this.loadRecoveryData();
+    }, 30000);
+  }
+
+  ngOnDestroy(): void { window.clearInterval(this.refreshTimer); }
 
   private async checkAuthentication(): Promise<void> {
     try {
@@ -113,6 +175,7 @@ export class App {
       this.isAuthenticated.set(true);
       await this.loadCrmData();
       await this.handlePageReturn();
+      if (this.page() === 'Overview') void this.loadDashboard();
     } catch (error) {
       if (!(error instanceof Error && 'status' in error && (error as { status: number }).status === 401)) {
         this.authError.set('The API could not be reached. Start the ASP.NET API, then try again.');
@@ -138,6 +201,7 @@ export class App {
       this.authSuccess.set(''); this.page.set('Overview');
       await this.loadCrmData();
       await this.handlePageReturn();
+      if (this.page() === 'Overview') void this.loadDashboard();
     } catch (error) {
       this.authError.set(this.errorMessage(error, 'We could not sign you in. Check your details and try again.'));
     } finally { this.authBusy.set(false); }
@@ -164,6 +228,7 @@ export class App {
       const [companiesResult, membersResult] = await Promise.allSettled([this.api.companies(), this.api.members()]);
       const companies = companiesResult.status === 'fulfilled' ? companiesResult.value.items : [];
       const members = membersResult.status === 'fulfilled' ? membersResult.value : [];
+      this.workspaceMembers.set(members);
       this.companies.set(companies);
       const user = this.currentUser();
       const contactById = new Map(contactsPage.items.map(contact => [contact.id, contact]));
@@ -181,6 +246,239 @@ export class App {
   }
 
   protected can(permission: string): boolean { return this.currentUser()?.permissions.includes(permission) ?? false; }
+
+  protected navAllowed(name: string): boolean {
+    if (name === 'Leads') return this.can('leads.view');
+    if (name === 'WhatsApp') return this.can('whatsapp.inbox.view');
+    if (name === 'Reports') return this.can('dashboard.view');
+    if (name === 'Saved lists') return this.can('crm.contacts.view') || this.can('crm.opportunities.view') || this.can('leads.view');
+    if (name === 'Audit history') return this.can('audit.view');
+    if (name === 'Integrations') return this.can('integrations.manage');
+    if (name === 'Recovery queue') return this.can('leads.reassign');
+    if (name === 'Team') return this.can('workspace.members.manage') || this.can('leads.view-all');
+    if (name === 'Settings') return this.can('crm.pipelines.manage') || this.can('crm.custom-fields.manage') || this.can('assignment.rules.manage');
+    return true;
+  }
+
+  protected async loadDashboard(): Promise<void> {
+    if (!this.can('dashboard.view')) return;
+    this.phase5Busy.set(true); this.phase5Error.set('');
+    try {
+      this.dashboard.set(await this.api.dashboardOverview());
+      const user = this.currentUser();
+      if (user) {
+        const stored = localStorage.getItem(`leadflow.dashboard.cards:${user.workspaceId}:${user.userId}`);
+        if (stored) this.dashboardCardVisibility.set(JSON.parse(stored) as Record<string, boolean>);
+      }
+    } catch (error) { this.phase5Error.set(this.errorMessage(error, 'Could not load dashboard metrics.')); }
+    finally { this.phase5Busy.set(false); }
+  }
+
+  protected dashboardCardVisible(key: string): boolean { return this.dashboardCardVisibility()[key] !== false; }
+
+  protected toggleDashboardCard(key: string): void {
+    const next = { ...this.dashboardCardVisibility(), [key]: !this.dashboardCardVisible(key) };
+    this.dashboardCardVisibility.set(next);
+    const user = this.currentUser();
+    if (user) localStorage.setItem(`leadflow.dashboard.cards:${user.workspaceId}:${user.userId}`, JSON.stringify(next));
+  }
+
+  protected durationLabel(seconds?: number | null): string {
+    if (seconds == null || !Number.isFinite(seconds)) return 'No acknowledged leads yet';
+    if (seconds < 60) return `${Math.max(0, Math.round(seconds))} sec`;
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60) return `${minutes} min`;
+    const hours = Math.floor(minutes / 60);
+    return `${hours} hr ${minutes % 60} min`;
+  }
+
+  protected maxStageCount(stages: ApiDashboard['pipelineByStage']): number {
+    return Math.max(1, ...stages.map(stage => stage.opportunityCount));
+  }
+
+  protected auditLastPage(): number { return Math.max(1, Math.ceil(this.auditTotal() / 50)); }
+
+  protected async changeAuditPage(delta: number): Promise<void> {
+    this.auditPage.update(page => Math.min(this.auditLastPage(), Math.max(1, page + delta)));
+    await this.loadAudit();
+  }
+
+  protected async loadRecoveryData(): Promise<void> {
+    if (!this.can('leads.reassign')) { this.phase5Error.set('Your role cannot view the workspace recovery queue.'); return; }
+    this.phase5Busy.set(true); this.phase5Error.set('');
+    try { this.recoveryItems.set((await this.api.recoveryLeads()).items); }
+    catch (error) { this.phase5Error.set(this.errorMessage(error, 'Could not load the recovery queue.')); }
+    finally { this.phase5Busy.set(false); }
+  }
+
+  protected async loadSavedLists(): Promise<void> {
+    this.phase5Busy.set(true); this.phase5Error.set('');
+    try {
+      this.savedLists.set(await this.api.savedLists());
+      const selected = this.activeSavedList();
+      const next = selected ? this.savedLists().find(x => x.id === selected.id) : this.savedLists()[0];
+      if (next) await this.selectSavedList(next);
+      else { this.activeSavedList.set(null); this.savedListResults.set([]); this.savedListTotal.set(0); }
+    } catch (error) { this.phase5Error.set(this.errorMessage(error, 'Could not load saved lists.')); }
+    finally { this.phase5Busy.set(false); }
+  }
+
+  protected async selectSavedList(list: ApiSavedList): Promise<void> {
+    this.activeSavedList.set(list); this.phase5Error.set(''); this.savedListPage.set(1);
+    this.savedListName = list.name; this.savedListType = list.entityType;
+    this.savedListSearch = list.filters.search ?? ''; this.savedListSource = list.filters.source ?? '';
+    this.savedListOwner = list.filters.ownerUserId ?? ''; this.savedListPipeline = list.filters.pipelineId ?? '';
+    this.savedListStage = list.filters.stageId ?? '';
+    this.savedListFromDate = this.utcToDateInput(list.filters.createdFromUtc);
+    this.savedListToDate = this.utcToDateInput(list.filters.createdToUtc, true);
+    this.savedListCustomField = list.filters.customFieldId ?? '';
+    this.savedListCustomValue = list.filters.customFieldValue ?? ''; this.savedListShared = list.isShared;
+    await this.loadSavedListCustomFields();
+    await this.loadSavedListResults();
+  }
+
+  protected async loadSavedListResults(): Promise<void> {
+    const list = this.activeSavedList(); if (!list) return;
+    this.phase5Busy.set(true);
+    try {
+      const result = await this.api.savedListResults(list.id, this.savedListPage());
+      this.savedListResults.set(result.items); this.savedListTotal.set(result.totalCount);
+    } catch (error) { this.phase5Error.set(this.errorMessage(error, 'Could not load saved-list results.')); }
+    finally { this.phase5Busy.set(false); }
+  }
+
+  protected async changeSavedListPage(delta: number): Promise<void> {
+    this.savedListPage.update(page => Math.min(this.savedListLastPage(), Math.max(1, page + delta)));
+    await this.loadSavedListResults();
+  }
+
+  protected savedListLastPage(): number { return Math.max(1, Math.ceil(this.savedListTotal() / 100)); }
+
+  protected async loadSavedListCustomFields(): Promise<void> {
+    if (this.savedListType === 'Lead') { this.customFieldOptions.set([]); return; }
+    try {
+      this.customFieldOptions.set(await this.api.customFields(this.savedListType, this.savedListType === 'Opportunity' ? this.savedListPipeline || undefined : undefined));
+    } catch { this.customFieldOptions.set([]); }
+  }
+
+  protected async saveSavedList(): Promise<void> {
+    if (!this.savedListName.trim()) { this.phase5Error.set('Enter a name for this saved list.'); return; }
+    this.phase5Busy.set(true); this.phase5Error.set('');
+    try {
+      const filters = {
+        search: this.savedListSearch.trim() || undefined,
+        source: this.savedListType === 'Lead' ? this.savedListSource.trim() || undefined : undefined,
+        ownerUserId: this.savedListOwner || undefined,
+        pipelineId: this.savedListType === 'Opportunity' ? this.savedListPipeline || undefined : undefined,
+        stageId: this.savedListType === 'Opportunity' ? this.savedListStage || undefined : undefined,
+        createdFromUtc: this.dateInputToUtc(this.savedListFromDate) || undefined,
+        createdToUtc: this.dateInputToUtc(this.savedListToDate, true) || undefined,
+        customFieldId: this.savedListCustomField || undefined,
+        customFieldValue: this.savedListCustomField ? this.savedListCustomValue : undefined
+      };
+      const payload = { name: this.savedListName.trim(), entityType: this.savedListType, filters, isShared: this.savedListShared };
+      const selected = this.activeSavedList();
+      const saved = selected && selected.ownerUserId === this.currentUser()?.userId
+        ? await this.api.updateSavedList(selected.id, { ...payload, rowVersion: selected.rowVersion })
+        : await this.api.createSavedList(payload);
+      await this.loadSavedLists();
+      const refreshed = this.savedLists().find(x => x.id === saved.id) ?? saved;
+      await this.selectSavedList(refreshed);
+      this.notify(selected?.id === saved.id ? 'Saved list updated.' : 'Saved list stored. Its results update from workspace records each time it opens.');
+    } catch (error) { this.phase5Error.set(this.errorMessage(error, 'Could not save this list.')); }
+    finally { this.phase5Busy.set(false); }
+  }
+
+  protected async deleteSavedList(): Promise<void> {
+    const selected = this.activeSavedList(); if (!selected) return;
+    this.phase5Busy.set(true); this.phase5Error.set('');
+    try {
+      await this.api.deleteSavedList(selected.id); this.activeSavedList.set(null); this.savedListResults.set([]);
+      await this.loadSavedLists(); this.notify('Saved list deleted.');
+    } catch (error) { this.phase5Error.set(this.errorMessage(error, 'Could not delete this saved list.')); }
+    finally { this.phase5Busy.set(false); }
+  }
+
+  protected async loadAudit(): Promise<void> {
+    if (!this.can('audit.view')) { this.phase5Error.set('Your role cannot view the audit history.'); return; }
+    this.phase5Busy.set(true); this.phase5Error.set('');
+    try {
+      const result = await this.api.auditEntries({
+        page: this.auditPage(), eventType: this.auditEventFilter.trim() || undefined,
+        targetType: this.auditTargetFilter || undefined, actorUserId: this.auditActorFilter || undefined,
+        search: this.auditSearch.trim() || undefined,
+        fromUtc: this.dateInputToUtc(this.auditFromDate) || undefined,
+        toUtc: this.dateInputToUtc(this.auditToDate, true) || undefined
+      });
+      this.auditEntries.set(result.items); this.auditTotal.set(result.totalCount);
+    } catch (error) { this.phase5Error.set(this.errorMessage(error, 'Could not load audit history.')); }
+    finally { this.phase5Busy.set(false); }
+  }
+
+  protected formatAuditData(value: unknown): string { return value == null ? '—' : JSON.stringify(value); }
+
+  protected async openContact(contact: ApiContact): Promise<void> {
+    this.selectedContact.set(contact); this.contactActivities.set([]); this.contactConversations.set([]);
+    this.contactPayments.set([]); this.contactAppointments.set([]); this.contactOpportunities.set([]);
+    await this.loadContact360();
+  }
+
+  protected async loadContact360(): Promise<void> {
+    const contact = this.selectedContact(); if (!contact) return;
+    this.phase5Busy.set(true); this.phase5Error.set('');
+    const tasks: Promise<unknown>[] = [
+      this.api.contactActivities(contact.id),
+      this.api.opportunitiesForContact(contact.id)
+    ];
+    let emailIndex = -1, calendarIndex = -1;
+    if (this.can('email.inbox.view') && contact.email) { tasks.push(this.api.emailConversations(contact.email)); emailIndex = tasks.length - 1; }
+    if (this.can('calendar.use')) { tasks.push(this.api.calendarAppointments()); calendarIndex = tasks.length - 1; }
+    const results = await Promise.allSettled(tasks);
+    if (results[0].status === 'fulfilled') this.contactActivities.set((results[0].value as { items: ApiActivity[] }).items);
+    if (results[1].status === 'fulfilled') this.contactOpportunities.set((results[1].value as { items: ApiOpportunity[] }).items);
+    const emailResult = emailIndex >= 0 ? results[emailIndex] : undefined;
+    if (emailResult?.status === 'fulfilled') {
+      const items = (emailResult.value as { items: ApiEmailConversation[] }).items;
+      this.contactConversations.set(items.filter(x => x.contactId === contact.id ||
+        contact.email?.toLowerCase() === x.participantEmail.toLowerCase()));
+    }
+    const calendarResult = calendarIndex >= 0 ? results[calendarIndex] : undefined;
+    if (calendarResult?.status === 'fulfilled')
+      this.contactAppointments.set((calendarResult.value as ApiCalendarAppointment[]).filter(x => x.contactId === contact.id));
+    const opportunityRows = this.contactOpportunities();
+    if (this.can('crm.opportunities.value.view')) {
+      const paymentResults = await Promise.allSettled(opportunityRows.map(x => this.api.payments(x.id)));
+      this.contactPayments.set(paymentResults.flatMap(result => result.status === 'fulfilled' ? result.value : []));
+    }
+    const failed = results.some((result, index) => result.status === 'rejected' && (index < 2 || index === emailIndex || index === calendarIndex));
+    if (failed) this.phase5Error.set('Some customer history is unavailable for your current permissions or provider connections.');
+    this.phase5Busy.set(false);
+  }
+
+  protected closeContact(): void {
+    this.selectedContact.set(null); this.contactActivities.set([]); this.contactConversations.set([]);
+    this.contactPayments.set([]); this.contactAppointments.set([]); this.contactOpportunities.set([]);
+  }
+
+  protected dateInputToUtc(value: string, inclusiveEnd = false): string | null {
+    if (!value) return null;
+    const local = new Date(`${value}T00:00:00+05:00`);
+    if (inclusiveEnd) local.setTime(local.getTime() + 24 * 60 * 60 * 1000);
+    return local.toISOString();
+  }
+
+  private utcToDateInput(value?: string | null, exclusiveEnd = false): string {
+    if (!value) return '';
+    const date = new Date(value);
+    if (exclusiveEnd) date.setTime(date.getTime() - 24 * 60 * 60 * 1000);
+    return this.pakistanUtcToInput(date.toISOString()).slice(0, 10);
+  }
+
+  private readDashboardCardVisibility(): Record<string, boolean> {
+    const user = this.currentUser();
+    const stored = user ? localStorage.getItem(`leadflow.dashboard.cards:${user.workspaceId}:${user.userId}`) : null;
+    try { return stored ? JSON.parse(stored) as Record<string, boolean> : {}; } catch { return {}; }
+  }
 
   protected async loadIntegrationData(): Promise<void> {
     if (!this.canManageIntegrations()) { this.phase4Error.set('Ask a workspace owner or admin to manage connected services.'); return; }
@@ -384,7 +682,7 @@ export class App {
     const query = new URLSearchParams(window.location.search);
     if (query.has('calendar')) { this.page.set('Calendar'); await this.loadCalendarData(); }
     else if (query.has('lead')) {
-      this.page.set('Leads');
+      this.page.set('Opportunities');
       try { this.linkedLead.set(await this.api.assignedLead(query.get('lead')!)); }
       catch (error) { this.crmError.set(this.errorMessage(error, 'This lead link is unavailable in your workspace.')); }
       window.history.replaceState({}, document.title, window.location.pathname);
@@ -452,10 +750,15 @@ export class App {
   protected todayCount(): number { const today = new Date().toISOString().slice(0, 10); return this.leads().filter(lead => lead.createdAtUtc.slice(0, 10) === today).length; }
   protected openValue(): number { return this.leads().filter(lead => lead.stageKind === 'Open' && !lead.valueHidden).reduce((sum, lead) => sum + lead.value, 0); }
   protected setPage(name: string): void {
-    this.page.set(name); this.mobileNav.set(false); this.selectedLead.set(null); this.phase4Error.set('');
+    this.page.set(name); this.mobileNav.set(false); this.selectedLead.set(null); this.phase4Error.set(''); this.phase5Error.set('');
     if (name === 'Inbox') void this.loadInboxData();
     else if (name === 'Calendar') void this.loadCalendarData();
     else if (name === 'Integrations') void this.loadIntegrationData();
+    else if (name === 'Overview' || name === 'Reports') void this.loadDashboard();
+    else if (name === 'Recovery queue') void this.loadRecoveryData();
+    else if (name === 'Saved lists') void this.loadSavedLists();
+    else if (name === 'Audit history') void this.loadAudit();
+    else if (name === 'Contacts') this.closeContact();
   }
   protected openLead(lead: Lead): void { this.selectedLead.set(lead); void this.loadActivities(lead); void this.loadPayments(lead); }
   protected closeLead(): void { this.selectedLead.set(null); this.activities.set([]); }
@@ -512,7 +815,7 @@ export class App {
         value: this.newLeadValue.trim() ? Number(this.newLeadValue) : 0, description: this.newLeadDescription.trim()
       });
       this.newLeadName = ''; this.newLeadEmail = ''; this.newLeadCompany = ''; this.newLeadValue = ''; this.newLeadDescription = '';
-      this.showLeadModal.set(false); this.setPage('Leads'); await this.loadCrmData(); this.notify('Opportunity created.');
+      this.showLeadModal.set(false); this.setPage('Opportunities'); await this.loadCrmData(); this.notify('Opportunity created.');
     } catch (error) { this.notify(this.errorMessage(error, 'Could not create this opportunity.')); }
   }
   protected async addNote(lead: Lead, text: string): Promise<void> {

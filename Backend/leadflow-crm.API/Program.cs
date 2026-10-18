@@ -22,6 +22,8 @@ builder.Services.AddScoped<IntegrationSecretProtector>();
 builder.Services.AddScoped<WorkspaceIntegrationService>();
 builder.Services.AddScoped<WorkspaceEmailSender>();
 builder.Services.AddHttpClient<StripeCheckoutService>();
+builder.Services.AddHttpClient<TwilioWhatsAppService>(client => client.Timeout = TimeSpan.FromSeconds(30))
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
 builder.Services.AddHttpClient<GoogleCalendarService>();
 builder.Services.AddHostedService<LeadAssignmentBackgroundService>();
 builder.Services.AddDbContext<LeadflowDbContext>(options =>

@@ -35,16 +35,30 @@ public sealed class LeadflowDbContext(
     public DbSet<EmailConversation> EmailConversations => Set<EmailConversation>();
     public DbSet<EmailMessage> EmailMessages => Set<EmailMessage>();
     public DbSet<PaymentRecord> PaymentRecords => Set<PaymentRecord>();
+    public DbSet<WhatsAppMessage> WhatsAppMessages => Set<WhatsAppMessage>();
     public DbSet<CalendarConnection> CalendarConnections => Set<CalendarConnection>();
     public DbSet<CalendarOAuthState> CalendarOAuthStates => Set<CalendarOAuthState>();
     public DbSet<CalendarAppointment> CalendarAppointments => Set<CalendarAppointment>();
+    public DbSet<SavedListRecord> SavedLists => Set<SavedListRecord>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
+        builder.ApplyConfiguration(new SavedListModelConfiguration());
         CrmModelConfiguration.Configure(builder);
         LeadModelConfiguration.Configure(builder);
         IntegrationModelConfiguration.Configure(builder);
+        builder.Entity<WhatsAppMessage>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.HasIndex(x => new { x.WorkspaceId, x.ClientKey }).IsUnique();
+            e.HasIndex(x => new { x.WorkspaceId, x.ProviderMessageId }).IsUnique().HasFilter("[ProviderMessageId] IS NOT NULL");
+            e.HasIndex(x => new { x.WorkspaceId, x.Phone, x.CreatedAtUtc });
+            e.HasOne<Workspace>().WithMany().HasForeignKey(x => x.WorkspaceId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne<Contact>().WithMany().HasForeignKey(x => new { x.ContactId, x.WorkspaceId }).HasPrincipalKey(x => new { x.Id, x.WorkspaceId }).OnDelete(DeleteBehavior.Restrict);
+            e.Property(x => x.CreatedAtUtc).HasConversion(v => v, v => DateTime.SpecifyKind(v, DateTimeKind.Utc));
+            e.Property(x => x.UpdatedAtUtc).HasConversion(v => v, v => DateTime.SpecifyKind(v, DateTimeKind.Utc));
+        });
 
         builder.Entity<Workspace>(entity =>
         {

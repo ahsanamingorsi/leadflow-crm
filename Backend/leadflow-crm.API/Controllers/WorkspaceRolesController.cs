@@ -18,6 +18,9 @@ public sealed class WorkspaceRolesController(
     LeadflowDbContext dbContext,
     RoleManager<ApplicationRole> roleManager) : ControllerBase
 {
+    [HttpGet("permissions")]
+    public IActionResult Permissions() => Ok(PermissionCatalog.All);
+
     [HttpGet]
     public async Task<ActionResult<IReadOnlyList<WorkspaceRoleResponse>>> GetRoles()
     {

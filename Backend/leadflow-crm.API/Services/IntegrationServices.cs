@@ -28,6 +28,25 @@ public sealed class WorkspaceIntegrationService(
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
+    public async Task<T?> GetSettingsAsync<T>(Guid workspaceId, string provider, CancellationToken ct = default)
+    {
+        var row = await FindAsync(workspaceId, provider, ct);
+        return row is null || row.Status == nameof(IntegrationStatus.Disabled) || string.IsNullOrEmpty(row.EncryptedSettingsJson)
+            ? default : JsonSerializer.Deserialize<T>(protector.Unprotect(workspaceId, provider + ".settings", row.EncryptedSettingsJson), JsonOptions);
+    }
+
+    public async Task SaveSettingsAsync<T>(Guid workspaceId, string provider, T settings, CancellationToken ct = default)
+    {
+        var row = await FindAsync(workspaceId, provider, ct);
+        if (row is null) { row = new WorkspaceIntegration { WorkspaceId = workspaceId, Provider = provider }; db.WorkspaceIntegrations.Add(row); }
+        row.EncryptedSettingsJson = protector.Protect(workspaceId, provider + ".settings", JsonSerializer.Serialize(settings, JsonOptions));
+        row.Status = nameof(IntegrationStatus.Configured);
+        row.UpdatedAtUtc = DateTime.UtcNow;
+        row.ConnectedAtUtc = null;
+        row.LastError = null;
+        await db.SaveChangesAsync(ct);
+    }
+
     public async Task<WorkspaceIntegration?> FindAsync(Guid workspaceId, string provider,
         CancellationToken cancellationToken = default) =>
         await db.WorkspaceIntegrations.SingleOrDefaultAsync(x => x.WorkspaceId == workspaceId && x.Provider == provider, cancellationToken);

@@ -20,12 +20,46 @@ public sealed class EmailInboxController(
     WorkspaceIntegrationService integrations,
     WorkspaceEmailSender emailSender) : IntegrationApiControllerBase(crm)
 {
+    private IQueryable<EmailConversation> VisibleConversations()
+    {
+        var query = db.EmailConversations.Where(x => x.WorkspaceId == Crm.Actor.WorkspaceId);
+        if (!Crm.Can(PermissionCatalog.LeadsViewAll)) query = query.Where(x =>
+            db.Contacts.Any(c => c.Id == x.ContactId && c.WorkspaceId == x.WorkspaceId && !c.IsDeleted && c.OwnerUserId == Crm.Actor.Id) ||
+            db.Leads.Any(l => l.ContactId == x.ContactId && l.WorkspaceId == x.WorkspaceId && !l.IsDeleted && !l.IsClosed && l.OwnerUserId == Crm.Actor.Id));
+        return query;
+    }
+
+    [HttpPost, Authorize(Policy = PermissionCatalog.EmailInboxReply)]
+    public async Task<IActionResult> Compose(EmailComposeRequest request, CancellationToken ct)
+    {
+        var contact = await Crm.FindAsync<Contact>(request.ContactId);
+        if (!Crm.Can(PermissionCatalog.LeadsViewAll) && contact.OwnerUserId != Crm.Actor.Id &&
+            !await db.Leads.AnyAsync(x => x.WorkspaceId == Crm.Actor.WorkspaceId && x.ContactId == contact.Id && !x.IsClosed && !x.IsDeleted && x.OwnerUserId == Crm.Actor.Id, ct))
+            throw new CrmException(403, "Only the assigned employee or workspace manager can email this contact.");
+        if (contact.OptedOut) throw new CrmException(409, "This contact has opted out of communication.");
+        if (string.IsNullOrWhiteSpace(contact.Email)) throw new CrmException(400, "Add an email address to the contact first.");
+        if (await integrations.GetEmailSettingsAsync(Crm.Actor.WorkspaceId, ct) is null) throw new CrmException(409, "Configure workspace email first.");
+        var key = "compose:" + request.ClientKey;
+        var existing = await VisibleConversations().SingleOrDefaultAsync(x => x.ExternalThreadId == key, ct);
+        if (existing is not null)
+        {
+            if (existing.ContactId != contact.Id || existing.Subject != request.Subject.Trim()) throw new CrmException(409, "Request key is already used.");
+            return Ok(new { conversationId = existing.Id });
+        }
+        var conversation = new EmailConversation { WorkspaceId = Crm.Actor.WorkspaceId, ContactId = contact.Id,
+            ParticipantEmail = contact.Email, Subject = request.Subject.Trim(), ExternalThreadId = key };
+        db.EmailConversations.Add(conversation);
+        await db.SaveChangesAsync(ct);
+        await Reply(conversation.Id, new EmailReplyRequest { BodyText = request.BodyText }, ct);
+        return Ok(new { conversationId = conversation.Id });
+    }
+
     [HttpGet, Authorize(Policy = PermissionCatalog.EmailInboxView)]
     public async Task<ActionResult<PageResult<EmailConversationResponse>>> List([FromQuery] PageQuery request,
         CancellationToken cancellationToken)
     {
         var workspaceId = Crm.Actor.WorkspaceId;
-        var query = db.EmailConversations.AsNoTracking().Where(x => x.WorkspaceId == workspaceId);
+        var query = VisibleConversations().AsNoTracking();
         if (!string.IsNullOrWhiteSpace(request.Search))
         {
             var term = request.Search.Trim();
@@ -45,7 +79,7 @@ public sealed class EmailInboxController(
     public async Task<ActionResult<EmailConversationResponse>> Get(Guid id, CancellationToken cancellationToken)
     {
         var workspaceId = Crm.Actor.WorkspaceId;
-        var row = await db.EmailConversations.AsNoTracking().SingleOrDefaultAsync(x => x.Id == id && x.WorkspaceId == workspaceId, cancellationToken)
+        var row = await VisibleConversations().AsNoTracking().SingleOrDefaultAsync(x => x.Id == id, cancellationToken)
             ?? throw new CrmException(404, "The email conversation was not found in this workspace.");
         var messages = await db.EmailMessages.AsNoTracking().Where(x => x.ConversationId == id && x.WorkspaceId == workspaceId)
             .OrderBy(x => x.CreatedAtUtc).ToListAsync(cancellationToken);
@@ -56,7 +90,7 @@ public sealed class EmailInboxController(
     public async Task<ActionResult<EmailMessageResponse>> Reply(Guid id, EmailReplyRequest request, CancellationToken cancellationToken)
     {
         var workspaceId = Crm.Actor.WorkspaceId;
-        var conversation = await db.EmailConversations.SingleOrDefaultAsync(x => x.Id == id && x.WorkspaceId == workspaceId, cancellationToken)
+        var conversation = await VisibleConversations().SingleOrDefaultAsync(x => x.Id == id, cancellationToken)
             ?? throw new CrmException(404, "The email conversation was not found in this workspace.");
         if (conversation.ContactId.HasValue && await db.Contacts.AnyAsync(x => x.Id == conversation.ContactId &&
                 x.WorkspaceId == workspaceId && x.OptedOut && !x.IsDeleted, cancellationToken))
@@ -71,7 +105,7 @@ public sealed class EmailInboxController(
         var parentMessageId = previous?.MessageId ?? previous?.ProviderMessageId;
         var refs = string.Join(' ', new[] { previous?.References, parentMessageId }.Where(x => !string.IsNullOrWhiteSpace(x)));
         if (refs.Length > 2000) refs = refs[^2000..];
-        var subject = conversation.Subject.StartsWith("Re:", StringComparison.OrdinalIgnoreCase)
+        var subject = previous is null || conversation.Subject.StartsWith("Re:", StringComparison.OrdinalIgnoreCase)
             ? conversation.Subject : $"Re: {conversation.Subject}";
         var messageId = WorkspaceEmailSender.CreateMessageId(settings.FromAddress);
         var message = new EmailMessage
@@ -102,8 +136,8 @@ public sealed class EmailInboxController(
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
-            message.Status = EmailDeliveryStatus.Failed;
-            message.LastError = WorkspaceIntegrationService.SafeError(exception.Message);
+            message.Status = exception is System.Net.Mail.SmtpFailedRecipientException ? EmailDeliveryStatus.Failed : EmailDeliveryStatus.Unknown;
+            message.LastError = message.Status == EmailDeliveryStatus.Failed ? "SMTP rejected the recipient. Correct the address before retrying." : "SMTP delivery is unconfirmed. Check the mail server before sending again.";
             await integrations.MarkStatusAsync(workspaceId, "email", IntegrationStatus.Error, message.LastError, cancellationToken);
             db.IntegrationSyncEvents.Add(new IntegrationSyncEvent
             {
@@ -111,6 +145,15 @@ public sealed class EmailInboxController(
                 ExternalEventId = message.Id.ToString("N"), Status = "Failed", Summary = "Email reply delivery failed."
             });
         }
+        if (conversation.ContactId.HasValue)
+            db.Set<CrmActivity>().Add(new CrmActivity
+            {
+                WorkspaceId = workspaceId, EntityType = CrmEntityType.Contact, RecordId = conversation.ContactId.Value,
+                ActorUserId = Crm.Actor.Id, EventType = $"email.reply.{message.Status.ToString().ToLowerInvariant()}",
+                Summary = message.Status == EmailDeliveryStatus.Sent ? "Email reply sent." : "Email reply delivery failed."
+            });
+        db.AuditLogs.Add(LeadWorkflowService.CreateAudit(workspaceId, Crm.Actor.Id, "email.reply.completed",
+            "EmailMessage", message.Id, new { ConversationId = id, message.Status, message.CreatedAtUtc }));
         await db.SaveChangesAsync(cancellationToken);
         return Ok(ToResponse(message));
     }
@@ -119,13 +162,13 @@ public sealed class EmailInboxController(
     public async Task<ActionResult<EmailMessageResponse>> Retry(Guid conversationId, Guid messageId, CancellationToken cancellationToken)
     {
         var workspaceId = Crm.Actor.WorkspaceId;
-        var conversation = await db.EmailConversations.SingleOrDefaultAsync(x => x.Id == conversationId && x.WorkspaceId == workspaceId, cancellationToken)
+        var conversation = await VisibleConversations().SingleOrDefaultAsync(x => x.Id == conversationId, cancellationToken)
             ?? throw new CrmException(404, "The email conversation was not found in this workspace.");
         var message = await db.EmailMessages.SingleOrDefaultAsync(x => x.Id == messageId && x.ConversationId == conversationId &&
             x.WorkspaceId == workspaceId, cancellationToken)
             ?? throw new CrmException(404, "The email message was not found in this workspace.");
-        if (message.Direction != EmailMessageDirection.Outbound || message.Status is not (EmailDeliveryStatus.Failed or EmailDeliveryStatus.Pending))
-            throw new CrmException(409, "Only failed or interrupted outbound emails can be retried.");
+        if (message.Direction != EmailMessageDirection.Outbound || message.Status != EmailDeliveryStatus.Failed)
+            throw new CrmException(409, "Only confirmed failed outbound emails can be retried. Check SMTP delivery for pending messages.");
         if (conversation.ContactId.HasValue && await db.Contacts.AnyAsync(x => x.Id == conversation.ContactId &&
                 x.WorkspaceId == workspaceId && x.OptedOut && !x.IsDeleted, cancellationToken))
             throw new CrmException(409, "This contact has opted out of email communication.");
@@ -133,6 +176,9 @@ public sealed class EmailInboxController(
         var settings = await integrations.GetEmailSettingsAsync(workspaceId, cancellationToken);
         if (settings is null || integration?.Status is nameof(IntegrationStatus.Disabled))
             throw new CrmException(409, "Workspace email is not connected. Configure and test it before retrying.");
+        var claimed = await db.EmailMessages.Where(x => x.Id == messageId && x.WorkspaceId == workspaceId && x.Status == EmailDeliveryStatus.Failed)
+            .ExecuteUpdateAsync(s => s.SetProperty(x => x.Status, EmailDeliveryStatus.Pending), cancellationToken);
+        if (claimed != 1) throw new CrmException(409, "Another retry is already in progress.");
         message.Status = EmailDeliveryStatus.Pending;
         message.LastError = null;
         await db.SaveChangesAsync(cancellationToken);
@@ -151,8 +197,8 @@ public sealed class EmailInboxController(
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
-            message.Status = EmailDeliveryStatus.Failed;
-            message.LastError = WorkspaceIntegrationService.SafeError(exception.Message);
+            message.Status = exception is System.Net.Mail.SmtpFailedRecipientException ? EmailDeliveryStatus.Failed : EmailDeliveryStatus.Unknown;
+            message.LastError = message.Status == EmailDeliveryStatus.Failed ? "SMTP rejected the recipient." : "SMTP delivery is unconfirmed. Check the mail server before sending again.";
             await integrations.MarkStatusAsync(workspaceId, "email", IntegrationStatus.Error, message.LastError, cancellationToken);
             db.IntegrationSyncEvents.Add(new IntegrationSyncEvent
             {
@@ -160,6 +206,15 @@ public sealed class EmailInboxController(
                 ExternalEventId = $"{message.Id:N}:{Guid.NewGuid():N}", Status = "Failed", Summary = "Email reply retry failed."
             });
         }
+        if (conversation.ContactId.HasValue)
+            db.Set<CrmActivity>().Add(new CrmActivity
+            {
+                WorkspaceId = workspaceId, EntityType = CrmEntityType.Contact, RecordId = conversation.ContactId.Value,
+                ActorUserId = Crm.Actor.Id, EventType = $"email.reply.retry.{message.Status.ToString().ToLowerInvariant()}",
+                Summary = message.Status == EmailDeliveryStatus.Sent ? "Failed email reply retried successfully." : "Email reply retry failed."
+            });
+        db.AuditLogs.Add(LeadWorkflowService.CreateAudit(workspaceId, Crm.Actor.Id, "email.reply.retried",
+            "EmailMessage", message.Id, new { ConversationId = conversationId, message.Status }));
         await db.SaveChangesAsync(cancellationToken);
         return Ok(ToResponse(message));
     }
@@ -282,6 +337,14 @@ public sealed class InboundEmailWebhookController(
                 WorkspaceId = workspaceId, Provider = "email", EventType = "inbound.received",
                 ExternalEventId = messageHash, Status = "Succeeded", Summary = $"Inbound email received from {sender}.", OccurredAtUtc = receivedAt
             });
+            if (contact is not null)
+                db.Set<CrmActivity>().Add(new CrmActivity
+                {
+                    WorkspaceId = workspaceId, EntityType = CrmEntityType.Contact, RecordId = contact.Id,
+                    EventType = "email.received", Summary = "Inbound email received.", OccurredAtUtc = receivedAt
+                });
+            db.AuditLogs.Add(LeadWorkflowService.CreateAudit(workspaceId, null, "email.message.received",
+                "EmailMessage", message.Id, new { ConversationId = conversation.Id, ContactId = contact?.Id, LeadId = leadId, message.Status }));
             await db.SaveChangesAsync(cancellationToken);
             await integrations.MarkStatusAsync(workspaceId, "email", IntegrationStatus.Connected, cancellationToken: cancellationToken);
             await transaction.CommitAsync(cancellationToken);

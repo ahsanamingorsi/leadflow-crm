@@ -93,6 +93,14 @@ public sealed class PaymentsController(
                 ExternalEventId = payment.Id.ToString("N"), Status = "Failed", Summary = "Checkout session creation failed."
             });
         }
+        db.AuditLogs.Add(LeadWorkflowService.CreateAudit(workspaceId, Crm.Actor.Id, "payment.checkout-created",
+            "PaymentRecord", payment.Id, new { payment.OpportunityId, payment.Status, payment.CreatedAtUtc }));
+        db.Set<CrmActivity>().Add(new CrmActivity
+        {
+            WorkspaceId = workspaceId, EntityType = CrmEntityType.Opportunity, RecordId = opportunity.Id,
+            ActorUserId = Crm.Actor.Id, EventType = payment.Status == nameof(PaymentStatus.Failed) ? "payment.checkout-failed" : "payment.checkout-created",
+            Summary = payment.Status == nameof(PaymentStatus.Failed) ? "Payment checkout could not be created." : "Payment checkout link created."
+        });
         await db.SaveChangesAsync(cancellationToken);
         return Ok(ToResponse(payment));
     }
@@ -146,6 +154,7 @@ public sealed class PaymentsController(
             if (!string.IsNullOrWhiteSpace(objectId) && objectId.StartsWith("cs_", StringComparison.Ordinal))
                 payment.StripeCheckoutSessionId = objectId;
             if (!string.IsNullOrWhiteSpace(paymentIntentId)) payment.StripePaymentIntentId = paymentIntentId;
+            var previousStatus = payment.Status;
             switch (eventType)
             {
                 case "checkout.session.completed":
@@ -183,6 +192,16 @@ public sealed class PaymentsController(
                 WorkspaceId = payment.WorkspaceId, Provider = "stripe", EventType = eventType,
                 ExternalEventId = eventId, Status = "Succeeded", Summary = $"Stripe event {eventType} processed for payment {payment.Id}."
             });
+            if (!string.Equals(previousStatus, payment.Status, StringComparison.Ordinal))
+            {
+                db.AuditLogs.Add(LeadWorkflowService.CreateAudit(payment.WorkspaceId, null, "payment.status-changed",
+                    "PaymentRecord", payment.Id, new { BeforeStatus = previousStatus, AfterStatus = payment.Status, payment.OpportunityId }));
+                db.Set<CrmActivity>().Add(new CrmActivity
+                {
+                    WorkspaceId = payment.WorkspaceId, EntityType = CrmEntityType.Opportunity, RecordId = payment.OpportunityId,
+                    EventType = "payment.status-changed", Summary = $"Payment status changed to {payment.Status}."
+                });
+            }
             await db.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
             return Ok(new { received = true, paymentStatus = payment.Status });
