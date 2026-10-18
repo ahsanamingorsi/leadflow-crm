@@ -204,6 +204,10 @@ namespace leadflow_crm.API.Migrations
                         .HasMaxLength(256)
                         .HasColumnType("nvarchar(256)");
 
+                    b.Property<string>("NotificationEmail")
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)");
+
                     b.Property<string>("PasswordHash")
                         .HasColumnType("nvarchar(max)");
 
@@ -446,7 +450,7 @@ namespace leadflow_crm.API.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uniqueidentifier");
 
-                    b.Property<Guid>("ActorUserId")
+                    b.Property<Guid?>("ActorUserId")
                         .HasColumnType("uniqueidentifier");
 
                     b.Property<string>("EntityType")
@@ -539,6 +543,427 @@ namespace leadflow_crm.API.Migrations
                         .HasFilter("[IsDeleted] = 0");
 
                     b.ToTable("CrmCustomFields", (string)null);
+                });
+
+            modelBuilder.Entity("leadflow_crm.API.Models.Crm.EmployeeAvailability", b =>
+                {
+                    b.Property<Guid>("WorkspaceId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("ChangedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.HasKey("WorkspaceId", "UserId");
+
+                    b.HasIndex("UserId", "WorkspaceId");
+
+                    b.HasIndex("WorkspaceId", "Status", "UserId");
+
+                    b.ToTable("EmployeeAvailabilities", (string)null);
+                });
+
+            modelBuilder.Entity("leadflow_crm.API.Models.Crm.Lead", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime?>("AcknowledgedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime>("AcknowledgementDeadlineUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime>("AssignedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("AttentionReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<DateTime?>("ClosedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid>("ContactId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("EscalationCount")
+                        .HasColumnType("int");
+
+                    b.Property<Guid>("IntakeId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<bool>("IsClosed")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime>("LastActionAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("NextEscalationAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid>("OwnerUserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<string>("SourceDetail")
+                        .HasMaxLength(120)
+                        .HasColumnType("nvarchar(120)");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid>("WorkspaceId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ContactId", "WorkspaceId");
+
+                    b.HasIndex("IntakeId", "WorkspaceId");
+
+                    b.HasIndex("OwnerUserId", "WorkspaceId");
+
+                    b.HasIndex("WorkspaceId", "IsClosed", "NextEscalationAtUtc");
+
+                    b.HasIndex("WorkspaceId", "LastActionAtUtc", "IsClosed");
+
+                    b.HasIndex("WorkspaceId", "OwnerUserId", "IsClosed", "AcknowledgedAtUtc");
+
+                    b.ToTable("Leads", (string)null);
+                });
+
+            modelBuilder.Entity("leadflow_crm.API.Models.Crm.LeadAssignmentConfiguration", b =>
+                {
+                    b.Property<Guid>("WorkspaceId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("AcknowledgementWindowSeconds")
+                        .HasColumnType("int");
+
+                    b.Property<string>("EscalationIntervalsSecondsJson")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("EscalationUserIdsJson")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<int>("IdleWindowSeconds")
+                        .HasColumnType("int");
+
+                    b.Property<int>("MaxOpenLeadsPerEmployee")
+                        .HasColumnType("int");
+
+                    b.Property<int>("RetryIntervalSeconds")
+                        .HasColumnType("int");
+
+                    b.Property<Guid?>("RoundRobinLastUserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
+                    b.HasKey("WorkspaceId");
+
+                    b.HasIndex("RoundRobinLastUserId", "WorkspaceId");
+
+                    b.ToTable("LeadAssignmentConfigurations", (string)null);
+                });
+
+            modelBuilder.Entity("leadflow_crm.API.Models.Crm.LeadAssignmentHistory", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("AcknowledgementDeadlineUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("ActorType")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<Guid?>("ActorUserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid?>("ActorWorkspaceId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("AssignedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid>("LeadId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("NewOwnerUserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid?>("PreviousOwnerUserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("nvarchar(80)");
+
+                    b.Property<Guid>("WorkspaceId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ActorUserId", "ActorWorkspaceId");
+
+                    b.HasIndex("LeadId", "WorkspaceId");
+
+                    b.HasIndex("NewOwnerUserId", "WorkspaceId");
+
+                    b.HasIndex("PreviousOwnerUserId", "WorkspaceId");
+
+                    b.HasIndex("WorkspaceId", "LeadId", "AssignedAtUtc");
+
+                    b.ToTable("LeadAssignmentHistory", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_LeadAssignmentHistory_ActorWorkspace", "([ActorUserId] IS NULL AND [ActorWorkspaceId] IS NULL) OR ([ActorUserId] IS NOT NULL AND [ActorWorkspaceId] = [WorkspaceId])");
+                        });
+                });
+
+            modelBuilder.Entity("leadflow_crm.API.Models.Crm.LeadIntake", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("AttemptCount")
+                        .HasColumnType("int");
+
+                    b.Property<string>("CompanyName")
+                        .HasMaxLength(160)
+                        .HasColumnType("nvarchar(160)");
+
+                    b.Property<string>("ContactName")
+                        .IsRequired()
+                        .HasMaxLength(160)
+                        .HasColumnType("nvarchar(160)");
+
+                    b.Property<string>("Email")
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)");
+
+                    b.Property<string>("IdempotencyKeyHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<DateTime?>("LastAttemptAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("LastError")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<Guid?>("LeadId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid?>("MatchedContactId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Message")
+                        .HasMaxLength(4000)
+                        .HasColumnType("nvarchar(4000)");
+
+                    b.Property<string>("Phone")
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)");
+
+                    b.Property<DateTime>("ReceivedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<string>("SourceDetail")
+                        .HasMaxLength(120)
+                        .HasColumnType("nvarchar(120)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(24)
+                        .HasColumnType("nvarchar(24)");
+
+                    b.Property<Guid>("WorkspaceId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("MatchedContactId", "WorkspaceId");
+
+                    b.HasIndex("WorkspaceId", "IdempotencyKeyHash")
+                        .IsUnique();
+
+                    b.HasIndex("WorkspaceId", "Status", "ReceivedAtUtc");
+
+                    b.ToTable("LeadIntakes", (string)null);
+                });
+
+            modelBuilder.Entity("leadflow_crm.API.Models.Crm.LeadNotification", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("AttemptCount")
+                        .HasColumnType("int");
+
+                    b.Property<string>("BodyText")
+                        .IsRequired()
+                        .HasMaxLength(4000)
+                        .HasColumnType("nvarchar(4000)");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("LastError")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<Guid>("LeadId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("NextAttemptAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("RecipientEmail")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)");
+
+                    b.Property<Guid>("RecipientUserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
+                    b.Property<DateTime?>("SentAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(12)
+                        .HasColumnType("nvarchar(12)");
+
+                    b.Property<string>("Subject")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<Guid>("WorkspaceId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("LeadId", "WorkspaceId");
+
+                    b.HasIndex("RecipientUserId", "WorkspaceId");
+
+                    b.HasIndex("WorkspaceId", "CreatedAtUtc");
+
+                    b.HasIndex("Status", "NextAttemptAtUtc", "CreatedAtUtc");
+
+                    b.ToTable("LeadNotifications", (string)null);
+                });
+
+            modelBuilder.Entity("leadflow_crm.API.Models.Crm.LeadUserNotification", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid>("LeadId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Message")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<DateTime?>("ReadAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid>("RecipientUserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<Guid>("WorkspaceId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("LeadId", "WorkspaceId");
+
+                    b.HasIndex("RecipientUserId", "WorkspaceId");
+
+                    b.HasIndex("WorkspaceId", "RecipientUserId", "ReadAtUtc", "CreatedAtUtc");
+
+                    b.ToTable("LeadUserNotifications", (string)null);
                 });
 
             modelBuilder.Entity("leadflow_crm.API.Models.Crm.Opportunity", b =>
@@ -790,6 +1215,10 @@ namespace leadflow_crm.API.Migrations
                         .HasMaxLength(120)
                         .HasColumnType("nvarchar(120)");
 
+                    b.Property<string>("PublicIntakeTokenHash")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
                     b.Property<string>("TimeZoneId")
                         .IsRequired()
                         .HasMaxLength(80)
@@ -798,6 +1227,10 @@ namespace leadflow_crm.API.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("Name");
+
+                    b.HasIndex("PublicIntakeTokenHash")
+                        .IsUnique()
+                        .HasFilter("[PublicIntakeTokenHash] IS NOT NULL");
 
                     b.ToTable("Workspaces", (string)null);
                 });
@@ -1001,8 +1434,7 @@ namespace leadflow_crm.API.Migrations
                         .WithMany()
                         .HasForeignKey("ActorUserId", "WorkspaceId")
                         .HasPrincipalKey("Id", "WorkspaceId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Restrict);
                 });
 
             modelBuilder.Entity("leadflow_crm.API.Models.Crm.CustomFieldDefinition", b =>
@@ -1018,6 +1450,165 @@ namespace leadflow_crm.API.Migrations
                         .HasForeignKey("PipelineId", "WorkspaceId")
                         .HasPrincipalKey("Id", "WorkspaceId")
                         .OnDelete(DeleteBehavior.Restrict);
+                });
+
+            modelBuilder.Entity("leadflow_crm.API.Models.Crm.EmployeeAvailability", b =>
+                {
+                    b.HasOne("leadflow_crm.API.Models.Workspace", null)
+                        .WithMany()
+                        .HasForeignKey("WorkspaceId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("leadflow_crm.API.Models.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("UserId", "WorkspaceId")
+                        .HasPrincipalKey("Id", "WorkspaceId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("leadflow_crm.API.Models.Crm.Lead", b =>
+                {
+                    b.HasOne("leadflow_crm.API.Models.Workspace", null)
+                        .WithMany()
+                        .HasForeignKey("WorkspaceId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("leadflow_crm.API.Models.Crm.Contact", "Contact")
+                        .WithMany()
+                        .HasForeignKey("ContactId", "WorkspaceId")
+                        .HasPrincipalKey("Id", "WorkspaceId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("leadflow_crm.API.Models.Crm.LeadIntake", null)
+                        .WithMany()
+                        .HasForeignKey("IntakeId", "WorkspaceId")
+                        .HasPrincipalKey("Id", "WorkspaceId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("leadflow_crm.API.Models.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("OwnerUserId", "WorkspaceId")
+                        .HasPrincipalKey("Id", "WorkspaceId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Contact");
+                });
+
+            modelBuilder.Entity("leadflow_crm.API.Models.Crm.LeadAssignmentConfiguration", b =>
+                {
+                    b.HasOne("leadflow_crm.API.Models.Workspace", null)
+                        .WithMany()
+                        .HasForeignKey("WorkspaceId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("leadflow_crm.API.Models.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("RoundRobinLastUserId", "WorkspaceId")
+                        .HasPrincipalKey("Id", "WorkspaceId")
+                        .OnDelete(DeleteBehavior.Restrict);
+                });
+
+            modelBuilder.Entity("leadflow_crm.API.Models.Crm.LeadAssignmentHistory", b =>
+                {
+                    b.HasOne("leadflow_crm.API.Models.Workspace", null)
+                        .WithMany()
+                        .HasForeignKey("WorkspaceId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("leadflow_crm.API.Models.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("ActorUserId", "ActorWorkspaceId")
+                        .HasPrincipalKey("Id", "WorkspaceId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("leadflow_crm.API.Models.Crm.Lead", null)
+                        .WithMany()
+                        .HasForeignKey("LeadId", "WorkspaceId")
+                        .HasPrincipalKey("Id", "WorkspaceId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("leadflow_crm.API.Models.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("NewOwnerUserId", "WorkspaceId")
+                        .HasPrincipalKey("Id", "WorkspaceId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("leadflow_crm.API.Models.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("PreviousOwnerUserId", "WorkspaceId")
+                        .HasPrincipalKey("Id", "WorkspaceId")
+                        .OnDelete(DeleteBehavior.Restrict);
+                });
+
+            modelBuilder.Entity("leadflow_crm.API.Models.Crm.LeadIntake", b =>
+                {
+                    b.HasOne("leadflow_crm.API.Models.Workspace", null)
+                        .WithMany()
+                        .HasForeignKey("WorkspaceId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("leadflow_crm.API.Models.Crm.Contact", null)
+                        .WithMany()
+                        .HasForeignKey("MatchedContactId", "WorkspaceId")
+                        .HasPrincipalKey("Id", "WorkspaceId")
+                        .OnDelete(DeleteBehavior.Restrict);
+                });
+
+            modelBuilder.Entity("leadflow_crm.API.Models.Crm.LeadNotification", b =>
+                {
+                    b.HasOne("leadflow_crm.API.Models.Workspace", null)
+                        .WithMany()
+                        .HasForeignKey("WorkspaceId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("leadflow_crm.API.Models.Crm.Lead", null)
+                        .WithMany()
+                        .HasForeignKey("LeadId", "WorkspaceId")
+                        .HasPrincipalKey("Id", "WorkspaceId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("leadflow_crm.API.Models.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("RecipientUserId", "WorkspaceId")
+                        .HasPrincipalKey("Id", "WorkspaceId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("leadflow_crm.API.Models.Crm.LeadUserNotification", b =>
+                {
+                    b.HasOne("leadflow_crm.API.Models.Workspace", null)
+                        .WithMany()
+                        .HasForeignKey("WorkspaceId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("leadflow_crm.API.Models.Crm.Lead", null)
+                        .WithMany()
+                        .HasForeignKey("LeadId", "WorkspaceId")
+                        .HasPrincipalKey("Id", "WorkspaceId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("leadflow_crm.API.Models.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("RecipientUserId", "WorkspaceId")
+                        .HasPrincipalKey("Id", "WorkspaceId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("leadflow_crm.API.Models.Crm.Opportunity", b =>

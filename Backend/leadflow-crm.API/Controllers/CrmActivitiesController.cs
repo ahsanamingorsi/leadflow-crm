@@ -41,6 +41,18 @@ public sealed class CrmActivitiesController(CrmService crm) : CrmControllerBase(
     private async Task<ActionResult<ActivityResponse>> AddNoteAsync(CrmRecord record, CrmEntityType type, string text)
     {
         var activity = Crm.AddActivity(type, record.Id, "crm.note.added", text.Trim());
+        var contactId = type == CrmEntityType.Contact ? record.Id : ((Opportunity)record).ContactId;
+        var activeLeads = await Crm.Db.Leads.Where(x => x.WorkspaceId == Crm.Actor.WorkspaceId && x.ContactId == contactId &&
+            x.OwnerUserId == Crm.Actor.Id && !x.IsDeleted && !x.IsClosed && !x.AcknowledgedAtUtc.HasValue).ToListAsync();
+        foreach (var lead in activeLeads)
+        {
+            lead.AcknowledgedAtUtc = DateTime.UtcNow;
+            lead.LastActionAtUtc = lead.AcknowledgedAtUtc.Value;
+            lead.NextEscalationAtUtc = null;
+            lead.AttentionReason = null;
+            Crm.Db.AuditLogs.Add(LeadWorkflowService.CreateAudit(Crm.Actor.WorkspaceId, Crm.Actor.Id,
+                "lead.acknowledged-by-crm-activity", "Lead", lead.Id, new { ActivityId = activity.Id }));
+        }
         var audit = Crm.Track(record, "crm.note.added");
         audit.AfterJson = CrmService.Snapshot(new { NoteId = activity.Id, Text = activity.Summary });
         await Crm.SaveAsync();
@@ -54,10 +66,10 @@ public sealed class CrmActivitiesController(CrmService crm) : CrmControllerBase(
         if (!string.IsNullOrWhiteSpace(request.Search)) query = query.Where(x => x.Summary.Contains(request.Search.Trim()));
         var count = await query.CountAsync();
         var rows = await (from activity in query
-            join user in Crm.Db.Users on new { Id = activity.ActorUserId, activity.WorkspaceId } equals new { user.Id, user.WorkspaceId }
+            from user in Crm.Db.Users.Where(user => user.Id == activity.ActorUserId && user.WorkspaceId == activity.WorkspaceId).DefaultIfEmpty()
             orderby activity.OccurredAtUtc descending, activity.Id
             select new ActivityResponse(activity.Id, activity.EntityType, activity.RecordId, activity.ActorUserId,
-                user.DisplayName, activity.EventType, activity.Summary, activity.OccurredAtUtc))
+                user == null ? "System" : user.DisplayName, activity.EventType, activity.Summary, activity.OccurredAtUtc))
             .Skip((request.Page - 1) * request.PageSize).Take(request.PageSize).ToListAsync();
         return new(rows, count, request.Page, request.PageSize);
     }

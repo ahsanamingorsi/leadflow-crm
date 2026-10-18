@@ -8,6 +8,7 @@ public sealed class Workspace
     public string TimeZoneId { get; set; } = "Asia/Karachi";
     public bool IsActive { get; set; } = true;
     public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
+    public string? PublicIntakeTokenHash { get; set; }
 
     public ICollection<ApplicationUser> Users { get; set; } = new List<ApplicationUser>();
     public ICollection<ApplicationRole> Roles { get; set; } = new List<ApplicationRole>();
