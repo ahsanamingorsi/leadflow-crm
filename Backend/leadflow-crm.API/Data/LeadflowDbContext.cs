@@ -30,12 +30,21 @@ public sealed class LeadflowDbContext(
     public DbSet<LeadNotification> LeadNotifications => Set<LeadNotification>();
     public DbSet<LeadUserNotification> LeadUserNotifications => Set<LeadUserNotification>();
     public DbSet<Contact> Contacts => Set<Contact>();
+    public DbSet<WorkspaceIntegration> WorkspaceIntegrations => Set<WorkspaceIntegration>();
+    public DbSet<IntegrationSyncEvent> IntegrationSyncEvents => Set<IntegrationSyncEvent>();
+    public DbSet<EmailConversation> EmailConversations => Set<EmailConversation>();
+    public DbSet<EmailMessage> EmailMessages => Set<EmailMessage>();
+    public DbSet<PaymentRecord> PaymentRecords => Set<PaymentRecord>();
+    public DbSet<CalendarConnection> CalendarConnections => Set<CalendarConnection>();
+    public DbSet<CalendarOAuthState> CalendarOAuthStates => Set<CalendarOAuthState>();
+    public DbSet<CalendarAppointment> CalendarAppointments => Set<CalendarAppointment>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
         CrmModelConfiguration.Configure(builder);
         LeadModelConfiguration.Configure(builder);
+        IntegrationModelConfiguration.Configure(builder);
 
         builder.Entity<Workspace>(entity =>
         {

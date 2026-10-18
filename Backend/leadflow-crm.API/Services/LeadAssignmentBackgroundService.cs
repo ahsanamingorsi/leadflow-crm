@@ -21,7 +21,9 @@ public sealed class LeadAssignmentBackgroundService(
                 var workflow = scope.ServiceProvider.GetRequiredService<LeadWorkflowService>();
                 await workflow.ProcessPendingIntakesAsync(stoppingToken);
                 await workflow.ProcessDueLeadsAsync(stoppingToken);
-                await SendPendingEmailsAsync(scope.ServiceProvider.GetRequiredService<LeadflowDbContext>(), stoppingToken);
+                await SendPendingEmailsAsync(scope.ServiceProvider.GetRequiredService<LeadflowDbContext>(),
+                    scope.ServiceProvider.GetRequiredService<WorkspaceEmailSender>(),
+                    scope.ServiceProvider.GetRequiredService<WorkspaceIntegrationService>(), stoppingToken);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { break; }
             catch (Exception exception) { logger.LogError(exception, "Lead workflow background cycle failed; it will retry."); }
@@ -31,11 +33,11 @@ public sealed class LeadAssignmentBackgroundService(
         }
     }
 
-    private async Task SendPendingEmailsAsync(LeadflowDbContext db, CancellationToken cancellationToken)
+    private async Task SendPendingEmailsAsync(LeadflowDbContext db, WorkspaceEmailSender workspaceEmailSender,
+        WorkspaceIntegrationService integrations, CancellationToken cancellationToken)
     {
         var smtpHost = configuration["Notifications:Smtp:Host"];
         var from = configuration["Notifications:Smtp:FromAddress"];
-        if (string.IsNullOrWhiteSpace(smtpHost) || string.IsNullOrWhiteSpace(from)) return;
 
         var dueIds = await db.LeadNotifications.Where(x => x.Status == LeadNotificationStatus.Pending &&
                 x.NextAttemptAtUtc <= DateTime.UtcNow)
@@ -44,19 +46,29 @@ public sealed class LeadAssignmentBackgroundService(
         {
             var item = await db.LeadNotifications.SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
             if (item is null || item.Status != LeadNotificationStatus.Pending) continue;
+            var workspaceSettings = await integrations.GetEmailSettingsAsync(item.WorkspaceId, cancellationToken);
+            if (workspaceSettings is null && (string.IsNullOrWhiteSpace(smtpHost) || string.IsNullOrWhiteSpace(from))) continue;
             item.AttemptCount++;
             try
             {
-                await SmtpLeadEmailSender.SendAsync(configuration, from, item.RecipientEmail, item.Subject, item.BodyText, cancellationToken);
+                if (workspaceSettings is not null)
+                    await workspaceEmailSender.SendAsync(item.WorkspaceId, item.RecipientEmail, item.Subject, item.BodyText,
+                        cancellationToken: cancellationToken);
+                else
+                    await SmtpLeadEmailSender.SendAsync(configuration, from!, item.RecipientEmail, item.Subject, item.BodyText, cancellationToken);
                 item.Status = LeadNotificationStatus.Sent;
                 item.SentAtUtc = DateTime.UtcNow;
                 item.LastError = null;
+                if (workspaceSettings is not null)
+                    await integrations.MarkStatusAsync(item.WorkspaceId, "email", IntegrationStatus.Connected, cancellationToken: cancellationToken);
             }
             catch (Exception exception) when (exception is not OperationCanceledException)
             {
                 item.LastError = exception.Message.Length > 1000 ? exception.Message[..1000] : exception.Message;
                 if (item.AttemptCount >= 3) item.Status = LeadNotificationStatus.Failed;
                 else item.NextAttemptAtUtc = DateTime.UtcNow.AddSeconds(item.AttemptCount == 1 ? 15 : 60);
+                if (workspaceSettings is not null)
+                    await integrations.MarkStatusAsync(item.WorkspaceId, "email", IntegrationStatus.Error, item.LastError, cancellationToken);
                 logger.LogWarning("Email delivery {NotificationId} failed on attempt {AttemptCount}.", item.Id, item.AttemptCount);
             }
             try { await db.SaveChangesAsync(cancellationToken); }

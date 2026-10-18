@@ -1,7 +1,7 @@
 import { Component, computed, signal } from '@angular/core';
 import { DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { ApiActivity, ApiCompany, ApiContact, ApiMember, ApiOpportunity, ApiPipeline, ApiStage, CurrentUser, CrmApiService } from './crm-api.service';
+import { ApiActivity, ApiAssignedLead, ApiCalendarAppointment, ApiCalendarConnection, ApiCompany, ApiContact, ApiEmailConversation, ApiEmailSettings, ApiIntegrationStatus, ApiMember, ApiOpportunity, ApiPayment, ApiPipeline, ApiStage, CurrentUser, CrmApiService } from './crm-api.service';
 
 type Lead = {
   id: string; opportunityId: string; contactId: string; pipelineId: string; stageId: string; rowVersion: number[];
@@ -42,6 +42,41 @@ export class App {
   protected newLeadValue = '';
   protected newLeadDescription = '';
   protected activities = signal<ApiActivity[]>([]);
+  protected phase4Busy = signal(false);
+  protected phase4Error = signal('');
+  protected integrationStatuses = signal<ApiIntegrationStatus[]>([]);
+  protected emailSettings = signal<ApiEmailSettings | null>(null);
+  protected integrationHistory = signal<Array<{ id: string; provider: string; eventType: string; status: string; summary: string; occurredAtUtc: string }>>([]);
+  protected emailConversations = signal<ApiEmailConversation[]>([]);
+  protected activeConversation = signal<ApiEmailConversation | null>(null);
+  protected emailReplyText = '';
+  protected payments = signal<ApiPayment[]>([]);
+  protected returnedPayment = signal<ApiPayment | null>(null);
+  protected paymentLead = signal<Lead | null>(null);
+  protected calendarConnection = signal<ApiCalendarConnection | null>(null);
+  protected appointments = signal<ApiCalendarAppointment[]>([]);
+  protected linkedLead = signal<ApiAssignedLead | null>(null);
+  protected emailHost = '';
+  protected emailPort = 587;
+  protected emailFromAddress = '';
+  protected emailEnableSsl = true;
+  protected emailUsername = '';
+  protected emailPassword = '';
+  protected emailWebhookSecret = '';
+  protected appointmentTitle = '';
+  protected appointmentDescription = '';
+  protected appointmentContactId = '';
+  protected appointmentOpportunityId = '';
+  protected appointmentAttendeeEmail = '';
+  protected appointmentStartsAt = '';
+  protected appointmentEndsAt = '';
+  protected editingAppointmentId = '';
+  protected calendarCanUse = computed(() => this.can('calendar.use'));
+  protected canManageIntegrations = computed(() => this.can('integrations.manage'));
+  protected filteredConversations = computed(() => {
+    const term = this.search().trim().toLowerCase();
+    return this.emailConversations().filter(item => !term || `${item.subject} ${item.participantEmail}`.toLowerCase().includes(term));
+  });
   protected leads = signal<Lead[]>([]);
   protected pipelines = signal<ApiPipeline[]>([]);
   protected contacts = signal<ApiContact[]>([]);
@@ -62,8 +97,8 @@ export class App {
     return this.contacts().filter(contact => !query || `${contact.displayName} ${contact.email ?? ''} ${contact.phone ?? ''}`.toLowerCase().includes(query));
   });
   protected readonly navMain = [
-    { name: 'Overview', icon: '⌂' }, { name: 'Leads', icon: '▤' }, { name: 'Pipeline', icon: '▥' },
-    { name: 'Recovery queue', icon: '↗' }, { name: 'Contacts', icon: '♧' }, { name: 'Calendar', icon: '▦' }
+    { name: 'Overview', icon: '⌂' }, { name: 'Leads', icon: '▤' }, { name: 'Pipeline', icon: '▥' }, { name: 'Payments', icon: '＄' },
+    { name: 'Recovery queue', icon: '↗' }, { name: 'Contacts', icon: '♧' }, { name: 'Inbox', icon: '✉' }, { name: 'Calendar', icon: '▦' }
   ];
   protected readonly navManage = [
     { name: 'Team', icon: '♙' }, { name: 'Reports', icon: '▧' }, { name: 'Integrations', icon: '⌘' }, { name: 'Settings', icon: '⚙' }
@@ -77,6 +112,7 @@ export class App {
       this.currentUser.set(user);
       this.isAuthenticated.set(true);
       await this.loadCrmData();
+      await this.handlePageReturn();
     } catch (error) {
       if (!(error instanceof Error && 'status' in error && (error as { status: number }).status === 401)) {
         this.authError.set('The API could not be reached. Start the ASP.NET API, then try again.');
@@ -101,6 +137,7 @@ export class App {
       this.currentUser.set(user); this.isAuthenticated.set(true); this.authPassword = '';
       this.authSuccess.set(''); this.page.set('Overview');
       await this.loadCrmData();
+      await this.handlePageReturn();
     } catch (error) {
       this.authError.set(this.errorMessage(error, 'We could not sign you in. Check your details and try again.'));
     } finally { this.authBusy.set(false); }
@@ -141,6 +178,230 @@ export class App {
     } catch (error) {
       this.crmError.set(this.errorMessage(error, 'Could not load CRM records. Try refreshing the page.'));
     } finally { this.crmLoading.set(false); }
+  }
+
+  protected can(permission: string): boolean { return this.currentUser()?.permissions.includes(permission) ?? false; }
+
+  protected async loadIntegrationData(): Promise<void> {
+    if (!this.canManageIntegrations()) { this.phase4Error.set('Ask a workspace owner or admin to manage connected services.'); return; }
+    this.phase4Busy.set(true); this.phase4Error.set('');
+    try {
+      const [statuses, settings, history] = await Promise.all([
+        this.api.integrationStatuses(), this.api.emailSettings(), this.api.integrationHistory()
+      ]);
+      this.integrationStatuses.set(statuses); this.emailSettings.set(settings); this.integrationHistory.set(history);
+      this.emailHost = settings.host ?? ''; this.emailPort = settings.port ?? 587;
+      this.emailFromAddress = settings.fromAddress ?? ''; this.emailEnableSsl = settings.enableSsl;
+      this.emailUsername = ''; this.emailPassword = ''; this.emailWebhookSecret = '';
+    } catch (error) { this.phase4Error.set(this.errorMessage(error, 'Could not load integration settings.')); }
+    finally { this.phase4Busy.set(false); }
+  }
+
+  protected async saveEmailSettings(): Promise<void> {
+    this.phase4Busy.set(true); this.phase4Error.set('');
+    try {
+      const input: { host: string; port: number; fromAddress: string; enableSsl: boolean; username?: string; password?: string; inboundWebhookSecret?: string } = {
+        host: this.emailHost.trim(), port: Number(this.emailPort), fromAddress: this.emailFromAddress.trim(), enableSsl: this.emailEnableSsl
+      };
+      if (this.emailUsername.trim()) input.username = this.emailUsername.trim();
+      if (this.emailPassword) input.password = this.emailPassword;
+      if (this.emailWebhookSecret) input.inboundWebhookSecret = this.emailWebhookSecret;
+      this.emailSettings.set(await this.api.saveEmailSettings(input));
+      this.emailPassword = ''; this.emailWebhookSecret = '';
+      await this.loadIntegrationData();
+      this.notify('Workspace email settings saved. Send a test email to confirm delivery.');
+    } catch (error) { this.phase4Error.set(this.errorMessage(error, 'Could not save email settings.')); }
+    finally { this.phase4Busy.set(false); }
+  }
+
+  protected async testEmailConnection(): Promise<void> {
+    this.phase4Busy.set(true); this.phase4Error.set('');
+    try {
+      const result = await this.api.testEmail(); this.emailSettings.set(result);
+      await this.loadIntegrationData();
+      if (result.status === 'Connected') this.notify('Test email delivered to your account.');
+      else this.phase4Error.set(result.lastError || 'Email delivery failed. Check the SMTP host, port, TLS, and credentials.');
+    } catch (error) { this.phase4Error.set(this.errorMessage(error, 'Email delivery test failed.')); }
+    finally { this.phase4Busy.set(false); }
+  }
+
+  protected async loadInboxData(): Promise<void> {
+    if (!this.can('email.inbox.view')) { this.phase4Error.set('Your account does not have access to the email inbox.'); return; }
+    this.phase4Busy.set(true); this.phase4Error.set('');
+    try {
+      const page = await this.api.emailConversations(); this.emailConversations.set(page.items);
+      if (this.activeConversation()) {
+        const updated = await this.api.emailConversation(this.activeConversation()!.id);
+        this.activeConversation.set(updated);
+      }
+    } catch (error) { this.phase4Error.set(this.errorMessage(error, 'Could not load email conversations.')); }
+    finally { this.phase4Busy.set(false); }
+  }
+
+  protected async selectConversation(conversation: ApiEmailConversation): Promise<void> {
+    this.activeConversation.set(conversation); this.emailReplyText = ''; this.phase4Error.set('');
+    try { this.activeConversation.set(await this.api.emailConversation(conversation.id)); }
+    catch (error) { this.phase4Error.set(this.errorMessage(error, 'Could not load this email thread.')); }
+  }
+
+  protected async sendEmailReply(): Promise<void> {
+    const thread = this.activeConversation();
+    if (!thread || !this.emailReplyText.trim()) return;
+    this.phase4Busy.set(true); this.phase4Error.set('');
+    try {
+      await this.api.replyToEmail(thread.id, this.emailReplyText.trim()); this.emailReplyText = '';
+      await this.loadInboxData();
+      this.notify('Email reply saved. Check its delivery status in the thread.');
+    } catch (error) { this.phase4Error.set(this.errorMessage(error, 'Could not send this email reply.')); }
+    finally { this.phase4Busy.set(false); }
+  }
+
+  protected async retryEmailReply(messageId: string): Promise<void> {
+    const thread = this.activeConversation();
+    if (!thread) return;
+    this.phase4Busy.set(true); this.phase4Error.set('');
+    try {
+      await this.api.retryEmailReply(thread.id, messageId);
+      this.activeConversation.set(await this.api.emailConversation(thread.id));
+      this.notify('Email delivery retry completed. Check its status in the thread.');
+    } catch (error) { this.phase4Error.set(this.errorMessage(error, 'Could not retry this email.')); }
+    finally { this.phase4Busy.set(false); }
+  }
+
+  protected async loadCalendarData(): Promise<void> {
+    if (!this.calendarCanUse()) { this.phase4Error.set('Your account does not have calendar access. Ask a workspace owner to update your role.'); return; }
+    this.phase4Busy.set(true); this.phase4Error.set('');
+    try {
+      const [connection, appointments] = await Promise.all([this.api.calendarStatus(), this.api.calendarAppointments()]);
+      this.calendarConnection.set(connection); this.appointments.set(appointments);
+      const query = new URLSearchParams(window.location.search).get('calendar');
+      if (query === 'connected') this.notify('Google Calendar is connected.');
+      else if (query && query !== 'connected') this.phase4Error.set(`Google Calendar connection returned: ${query.replaceAll('-', ' ')}.`);
+      if (query) window.history.replaceState({}, document.title, window.location.pathname);
+    } catch (error) { this.phase4Error.set(this.errorMessage(error, 'Could not load calendar appointments.')); }
+    finally { this.phase4Busy.set(false); }
+  }
+
+  protected async connectCalendar(): Promise<void> {
+    this.phase4Busy.set(true); this.phase4Error.set('');
+    try { const result = await this.api.calendarConnect(); window.location.assign(result.authorizationUrl); }
+    catch (error) { this.phase4Error.set(this.errorMessage(error, 'Could not start Google Calendar connection.')); this.phase4Busy.set(false); }
+  }
+
+  protected async disconnectCalendar(): Promise<void> {
+    this.phase4Busy.set(true); this.phase4Error.set('');
+    try { await this.api.disconnectCalendar(); this.calendarConnection.set(await this.api.calendarStatus()); this.notify('Google Calendar disconnected.'); }
+    catch (error) { this.phase4Error.set(this.errorMessage(error, 'Could not disconnect Google Calendar.')); }
+    finally { this.phase4Busy.set(false); }
+  }
+
+  protected async scheduleAppointment(): Promise<void> {
+    if (!this.appointmentTitle.trim() || !this.appointmentStartsAt || !this.appointmentEndsAt) {
+      this.phase4Error.set('Enter a title, start time, and end time.'); return;
+    }
+    this.phase4Busy.set(true); this.phase4Error.set('');
+    try {
+      const input = {
+        title: this.appointmentTitle.trim(), description: this.appointmentDescription.trim() || undefined,
+        contactId: this.appointmentContactId || undefined, opportunityId: this.appointmentOpportunityId || undefined,
+        attendeeEmail: this.appointmentAttendeeEmail.trim() || undefined,
+        startsAt: this.pakistanInputToUtc(this.appointmentStartsAt), endsAt: this.pakistanInputToUtc(this.appointmentEndsAt)
+      };
+      const wasEditing = Boolean(this.editingAppointmentId);
+      const result = wasEditing
+        ? await this.api.rescheduleAppointment(this.editingAppointmentId, input)
+        : await this.api.createAppointment(input);
+      this.appointments.update(items => (items.some(item => item.id === result.id)
+        ? items.map(item => item.id === result.id ? result : item)
+        : [...items, result]).sort((a, b) => a.startsAtUtc.localeCompare(b.startsAtUtc)));
+      this.appointmentTitle = ''; this.appointmentDescription = ''; this.appointmentContactId = '';
+      this.appointmentOpportunityId = ''; this.appointmentAttendeeEmail = ''; this.editingAppointmentId = '';
+      if (result.status === 'Failed') this.phase4Error.set(result.lastError || 'Google Calendar could not create this appointment.');
+      else this.notify(wasEditing ? 'Appointment updated in Google Calendar.' : 'Appointment added to Google Calendar.');
+    } catch (error) { this.phase4Error.set(this.errorMessage(error, 'Could not create this appointment.')); }
+    finally { this.phase4Busy.set(false); }
+  }
+
+  protected async cancelAppointment(appointment: ApiCalendarAppointment): Promise<void> {
+    this.phase4Busy.set(true); this.phase4Error.set('');
+    try {
+      const updated = await this.api.cancelAppointment(appointment.id);
+      this.appointments.update(items => items.map(item => item.id === updated.id ? updated : item));
+      if (updated.status === 'Cancelled') this.notify('Appointment cancelled.');
+      else this.phase4Error.set(updated.lastError || 'Could not cancel this appointment in Google Calendar.');
+    } catch (error) { this.phase4Error.set(this.errorMessage(error, 'Could not cancel this appointment.')); }
+    finally { this.phase4Busy.set(false); }
+  }
+
+  protected async retryAppointment(appointment: ApiCalendarAppointment): Promise<void> {
+    this.phase4Busy.set(true); this.phase4Error.set('');
+    try {
+      const updated = await this.api.retryAppointment(appointment.id);
+      this.appointments.update(items => items.map(item => item.id === updated.id ? updated : item));
+      if (updated.status === 'Failed') this.phase4Error.set(updated.lastError || 'Calendar sync failed again.');
+      else this.notify('Appointment synced with Google Calendar.');
+    } catch (error) { this.phase4Error.set(this.errorMessage(error, 'Could not retry calendar sync.')); }
+    finally { this.phase4Busy.set(false); }
+  }
+
+  protected editAppointment(appointment: ApiCalendarAppointment): void {
+    this.editingAppointmentId = appointment.id; this.appointmentTitle = appointment.title;
+    this.appointmentDescription = appointment.description ?? ''; this.appointmentContactId = appointment.contactId ?? '';
+    this.appointmentOpportunityId = appointment.opportunityId ?? ''; this.appointmentAttendeeEmail = appointment.attendeeEmail ?? '';
+    this.appointmentStartsAt = this.pakistanUtcToInput(appointment.startsAtUtc);
+    this.appointmentEndsAt = this.pakistanUtcToInput(appointment.endsAtUtc);
+    document.querySelector('.appointment-form')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  protected cancelAppointmentEdit(): void {
+    this.editingAppointmentId = ''; this.appointmentTitle = ''; this.appointmentDescription = '';
+    this.appointmentContactId = ''; this.appointmentOpportunityId = ''; this.appointmentAttendeeEmail = '';
+    this.appointmentStartsAt = ''; this.appointmentEndsAt = '';
+  }
+
+  protected pakistanTime(value: string): string {
+    return new Intl.DateTimeFormat('en-PK', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Karachi' }).format(new Date(value));
+  }
+
+  private pakistanInputToUtc(value: string): string {
+    const [datePart, timePart] = value.split('T');
+    const [year, month, day] = datePart.split('-').map(Number);
+    const [hour, minute] = timePart.split(':').map(Number);
+    const target = Date.UTC(year, month - 1, day, hour, minute);
+    const parts = new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Karachi', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(new Date(target));
+    const values = Object.fromEntries(parts.map(part => [part.type, part.value]));
+    const represented = Date.UTC(Number(values['year']), Number(values['month']) - 1, Number(values['day']), Number(values['hour']), Number(values['minute']));
+    return new Date(target - (represented - target)).toISOString();
+  }
+
+  private pakistanUtcToInput(value: string): string {
+    const parts = new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Karachi', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(new Date(value));
+    const values = Object.fromEntries(parts.map(part => [part.type, part.value]));
+    return `${values['year']}-${values['month']}-${values['day']}T${values['hour']}:${values['minute']}`;
+  }
+
+  private async handlePageReturn(): Promise<void> {
+    const query = new URLSearchParams(window.location.search);
+    if (query.has('calendar')) { this.page.set('Calendar'); await this.loadCalendarData(); }
+    else if (query.has('lead')) {
+      this.page.set('Leads');
+      try { this.linkedLead.set(await this.api.assignedLead(query.get('lead')!)); }
+      catch (error) { this.crmError.set(this.errorMessage(error, 'This lead link is unavailable in your workspace.')); }
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+    else if (query.has('payment')) {
+      this.page.set('Payments');
+      const sessionId = query.get('session_id');
+      if (sessionId) {
+        try {
+          const payment = await this.api.paymentBySession(sessionId);
+          this.returnedPayment.set(payment);
+          const lead = this.leads().find(item => item.opportunityId === payment.opportunityId);
+          if (lead) await this.showPayments(lead);
+        } catch (error) { this.phase4Error.set(this.errorMessage(error, 'Payment session details are not available in this workspace.')); }
+      } else if (query.get('payment') === 'cancelled') this.phase4Error.set('Checkout was cancelled. The payment remains unpaid.');
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
   }
 
   private toLead(opportunity: ApiOpportunity, contacts: Map<string, ApiContact>, companies: Map<string, string>, members: Map<string, ApiMember>, stages: Map<string, ApiStage>, user: CurrentUser | null): Lead {
@@ -190,9 +451,37 @@ export class App {
   protected isOverdue(lead: Lead): boolean { return lead.overdue; }
   protected todayCount(): number { const today = new Date().toISOString().slice(0, 10); return this.leads().filter(lead => lead.createdAtUtc.slice(0, 10) === today).length; }
   protected openValue(): number { return this.leads().filter(lead => lead.stageKind === 'Open' && !lead.valueHidden).reduce((sum, lead) => sum + lead.value, 0); }
-  protected setPage(name: string): void { this.page.set(name); this.mobileNav.set(false); this.selectedLead.set(null); }
-  protected openLead(lead: Lead): void { this.selectedLead.set(lead); void this.loadActivities(lead); }
+  protected setPage(name: string): void {
+    this.page.set(name); this.mobileNav.set(false); this.selectedLead.set(null); this.phase4Error.set('');
+    if (name === 'Inbox') void this.loadInboxData();
+    else if (name === 'Calendar') void this.loadCalendarData();
+    else if (name === 'Integrations') void this.loadIntegrationData();
+  }
+  protected openLead(lead: Lead): void { this.selectedLead.set(lead); void this.loadActivities(lead); void this.loadPayments(lead); }
   protected closeLead(): void { this.selectedLead.set(null); this.activities.set([]); }
+  protected async loadPayments(lead: Lead): Promise<void> {
+    if (!this.can('crm.opportunities.view')) { this.payments.set([]); return; }
+    try { this.payments.set(await this.api.payments(lead.opportunityId)); }
+    catch { this.payments.set([]); }
+  }
+  protected async showPayments(lead: Lead): Promise<void> {
+    this.paymentLead.set(lead); this.payments.set([]); this.phase4Error.set('');
+    await this.loadPayments(lead);
+  }
+  protected async createPaymentLink(lead: Lead): Promise<void> {
+    if (!this.can('crm.opportunities.edit') || !this.can('crm.opportunities.value.view') || lead.value <= 0) {
+      this.notify('A visible opportunity value and edit permission are required to create a payment link.'); return;
+    }
+    this.phase4Busy.set(true); this.phase4Error.set('');
+    try {
+      this.paymentLead.set(lead);
+      const payment = await this.api.createPaymentCheckout(lead.opportunityId, crypto.randomUUID());
+      this.payments.update(items => [payment, ...items.filter(item => item.id !== payment.id)]);
+      if (payment.status === 'Failed') this.phase4Error.set(payment.lastError || 'Stripe could not create the checkout link.');
+      else this.notify('Stripe checkout link created. Open it from the payment list below.');
+    } catch (error) { this.phase4Error.set(this.errorMessage(error, 'Could not create a Stripe checkout link.')); }
+    finally { this.phase4Busy.set(false); }
+  }
   protected async loadActivities(lead: Lead): Promise<void> {
     try { this.activities.set((await this.api.activities(lead.opportunityId)).items); }
     catch { this.activities.set([]); }

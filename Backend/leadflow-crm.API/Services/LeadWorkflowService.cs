@@ -12,7 +12,8 @@ using Microsoft.EntityFrameworkCore.Storage;
 
 namespace leadflow_crm.API.Services;
 
-public sealed class LeadWorkflowService(LeadflowDbContext db, CrmService crm, ILogger<LeadWorkflowService> logger)
+public sealed class LeadWorkflowService(LeadflowDbContext db, CrmService crm, ILogger<LeadWorkflowService> logger,
+    IConfiguration configuration)
 {
     public static string Hash(string value) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value)));
     public static string NewPublicToken() => Convert.ToBase64String(RandomNumberGenerator.GetBytes(32)).TrimEnd('=').Replace('+', '-').Replace('/', '_');
@@ -34,6 +35,14 @@ public sealed class LeadWorkflowService(LeadflowDbContext db, CrmService crm, IL
         ValidateIdempotencyKey(key);
         if (request.Source is not ("Manual" or "Website")) throw new CrmException(400, "Source must be Manual or Website.");
         return CreateIntakeAsync(crm.Actor.WorkspaceId, key, request, request.Source, request.SourceDetail, request.ContactId, cancellationToken);
+    }
+
+    public Task<IntakeQueuedResponse> CreateIntegrationIntakeAsync(Guid workspaceId, string key,
+        LeadIntakeRequest request, string source, string? sourceDetail, CancellationToken cancellationToken = default)
+    {
+        ValidateIdempotencyKey(key);
+        if (source is not ("Email" or "Website")) throw new CrmException(400, "The integration source is invalid.");
+        return CreateIntakeAsync(workspaceId, key, request, source, sourceDetail, null, cancellationToken);
     }
 
     private async Task<IntakeQueuedResponse> CreateIntakeAsync(Guid workspaceId, string key, LeadIntakeRequest request,
@@ -298,7 +307,7 @@ public sealed class LeadWorkflowService(LeadflowDbContext db, CrmService crm, IL
             await db.LeadNotifications.AddAsync(new LeadNotification { WorkspaceId = workspaceId, LeadId = lead.Id,
                 RecipientUserId = next.Id, RecipientEmail = targetEmail,
                 Subject = "Escalated lead requires your response",
-                BodyText = $"A {lead.Source} lead is now assigned to you. The acknowledgement deadline is {lead.AcknowledgementDeadlineUtc:O}." }, cancellationToken);
+                BodyText = BuildEscalationEmailBody(lead, configuration["Frontend:BaseUrl"] ?? "http://localhost:4200", now) }, cancellationToken);
         db.AuditLogs.Add(CreateAudit(workspaceId, null, "lead.escalated", "Lead", lead.Id,
             new { PreviousOwnerUserId = historyOwners.LastOrDefault(), NewOwnerUserId = next.Id, lead.EscalationCount, lead.AcknowledgementDeadlineUtc }));
         await db.SaveChangesAsync(cancellationToken);
@@ -449,6 +458,18 @@ public sealed class LeadWorkflowService(LeadflowDbContext db, CrmService crm, IL
         TargetId = targetId.ToString(), AfterJson = JsonSerializer.Serialize(after)
     };
     private static string? Clean(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private static string BuildEscalationEmailBody(Lead lead, string frontendBaseUrl, DateTime now)
+    {
+        var baseUrl = frontendBaseUrl.TrimEnd('/');
+        var pakistanTime = TimeZoneInfo.ConvertTimeFromUtc(lead.AcknowledgementDeadlineUtc, TimeZoneInfo.FindSystemTimeZoneById("Asia/Karachi"));
+        var reason = string.IsNullOrWhiteSpace(lead.AttentionReason) ? "Lead requires a timely response." : lead.AttentionReason;
+        return $"A {lead.Source} lead is now assigned to you.\n" +
+            $"Attention reason: {reason}\n" +
+            $"Acknowledgement deadline (Pakistan time): {pakistanTime:yyyy-MM-dd HH:mm} PKT\n" +
+            $"Open lead: {baseUrl}/?lead={lead.Id:D}\n" +
+            $"Notification created at: {now:O}";
+    }
     private static string? NormalizePhone(string? value) => string.IsNullOrWhiteSpace(value) ? null : new string(value.Trim().Where(c => !char.IsWhiteSpace(c)).ToArray());
     private static void ValidateIdempotencyKey(string key)
     {

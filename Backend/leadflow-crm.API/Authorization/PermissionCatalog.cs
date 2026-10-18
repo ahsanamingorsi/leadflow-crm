@@ -33,6 +33,9 @@ public static class PermissionCatalog
     public const string LeadNotificationsView = "leads.notifications.view";
     public const string AssignmentRulesManage = "assignment.rules.manage";
     public const string IntegrationsManage = "integrations.manage";
+    public const string EmailInboxView = "email.inbox.view";
+    public const string EmailInboxReply = "email.inbox.reply";
+    public const string CalendarUse = "calendar.use";
     public const string AuditView = "audit.view";
     public const string DashboardView = "dashboard.view";
 
@@ -69,6 +72,9 @@ public static class PermissionCatalog
         LeadNotificationsView,
         AssignmentRulesManage,
         IntegrationsManage,
+        EmailInboxView,
+        EmailInboxReply,
+        CalendarUse,
         AuditView,
         DashboardView
     ];
@@ -90,6 +96,9 @@ public static class PermissionCatalog
         LeadsAcknowledge,
         AvailabilityEditOwn,
         LeadNotificationsView,
+        EmailInboxView,
+        EmailInboxReply,
+        CalendarUse,
         DashboardView
     ];
 }
